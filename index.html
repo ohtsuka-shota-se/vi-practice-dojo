@@ -105,6 +105,8 @@ button{font-family:var(--font-ui); font-size:13.5px; border-radius:3px; border:1
 button:hover{border-color:var(--accent); box-shadow:0 0 10px rgba(54,230,255,.35);}
 button:focus-visible, summary:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
 button.primary{background:linear-gradient(90deg, rgba(54,230,255,.25), rgba(255,61,168,.25)); border-color:var(--accent); color:#fff; box-shadow:0 0 14px rgba(54,230,255,.35);}
+.start-line{margin:0 0 12px; font-size:13px; color:var(--fg-soft);}
+.start-line code{font-family:var(--font-mono); color:var(--accent); background:var(--surface-2); border-radius:3px; padding:0 5px;}
 .miss-note{margin-top:12px; font-size:13.5px; color:var(--command); background:rgba(255,181,71,.10); border:1px solid rgba(255,181,71,.45); border-radius:3px; padding:8px 12px;}
 .miss-note code{font-family:var(--font-mono); color:var(--command);}
 .clear-banner{display:flex; align-items:center; gap:10px; background:var(--ok-soft); color:var(--ok); border:1px solid rgba(67,245,168,.4); border-radius:3px; padding:8px 12px; font-family:var(--font-mono); font-weight:700; letter-spacing:.08em; margin-bottom:12px; text-shadow:0 0 8px rgba(67,245,168,.6);}
@@ -150,7 +152,9 @@ button.danger{border-color:var(--danger); color:var(--danger);}
 .status .right{color:var(--term-dim); flex-shrink:0; font-variant-numeric:tabular-nums;}
 .status .err{color:var(--term-err); text-shadow:0 0 6px rgba(255,122,149,.6);} .status .ok{color:var(--term-ok);} .status .warn{color:var(--term-warn);} .status .ins{color:var(--insert); font-weight:700; text-shadow:0 0 8px var(--insert);}
 .status .ccur{background:var(--term-cursor); color:var(--term-bg);}
-.shell-line{color:var(--term-fg);} .shell-line .p{color:var(--term-ok);}
+.shell-line{color:var(--term-fg);}
+.screen .sh-err{color:var(--term-err);} .screen .sh-warn{color:var(--term-warn);} .screen .sh-dim{color:var(--term-dim); text-shadow:none;}
+.screen.shell-screen{min-height:calc(15 * 1.6em);} .shell-line .p{color:var(--term-ok);}
 #kb{position:absolute; opacity:0; left:0; top:0; width:1px; height:1px; border:0; padding:0; resize:none;}
 .focus-hint{position:absolute; inset:auto 0 44px 0; display:flex; justify-content:center; pointer-events:none; z-index:2;}
 .focus-hint span{background:var(--accent-2); color:#fff; font-size:13px; font-weight:700; padding:4px 14px; border-radius:2px; box-shadow:0 0 16px var(--accent-2); animation:blink 1.4s steps(2) infinite;}
@@ -236,6 +240,12 @@ details.ref summary{cursor:pointer; font-weight:700;}
       <details class="ref" open>
         <summary>使えるコマンド早見表</summary>
         <div class="ref-grid">
+          <div><h3>シェル</h3><dl>
+            <dt>vi ファイル名</dt><dd>viで開く（なければ新規）</dd>
+            <dt>ls / ls -l</dt><dd>ファイル一覧</dd>
+            <dt>cat ファイル名</dt><dd>中身を表示</dd>
+            <dt>rm ファイル名</dt><dd>ファイルを削除</dd>
+            <dt>Tab / ↑</dt><dd>補完 / 履歴</dd></dl></div>
           <div><h3>モード</h3><dl>
             <dt>i a I A o O</dt><dd>挿入モードへ</dd>
             <dt>Esc</dt><dd>ノーマルモードへ</dd>
@@ -279,64 +289,64 @@ const APP = ['# sample config','server_name = test01','port = 8080','log_level =
 const eq = (a,b) => a.length===b.length && a.every((x,i)=>x===b[i]);
 const MISSIONS = [
   { id:'quit', title:'viから抜け出す', file:'memo.txt', lines:['Hello vi','This is my first memo.'],
-    goal:'まずは「閉じ方」から。何も変更せずに、viを終了してください。',
-    hints:['起動直後はノーマルモードです。','<code>:q</code> と打って <code>Enter</code> を押します。'],
+    goal:'まずは「開き方」と「閉じ方」から。<code>memo.txt</code> をviで開き、何も変更せずに終了してください。',
+    hints:['シェルで <code>vi memo.txt</code> と打って <code>Enter</code>。','起動直後はノーマルモードです。','<code>:q</code> と打って <code>Enter</code> を押すと、シェルに戻ります。'],
     check:S => S.exited && S.exitBy!=='write',
     miss:S => S.exited && S.exitBy==='write' ? '終了はできましたが、<code>:wq</code> や <code>:x</code>、<code>ZZ</code> は「保存して終了」です。変更していないファイルを閉じるだけなら <code>:q</code> を使いましょう。「最初からやり直す」で再挑戦できます。' : '' },
   { id:'discard', title:'変更を捨てて終了する', file:'memo.txt', lines:['Hello vi','This is my first memo.'],
-    setup:['G','d','d'],
+    setup:['G','d','d'], startInVi:true,
     goal:'誰かが2行目を消してしまった状態です。この変更は<b>保存せずに</b>終了してください。',
     hints:['<code>:q</code> だと E37 のエラーで閉じられません。','変更を捨てて閉じるのは <code>:q!</code> です。'],
     check:S => S.exited && eq(S.saved, ['Hello vi','This is my first memo.']),
     miss:S => S.exited && !eq(S.saved, ['Hello vi','This is my first memo.']) ? '終了はできましたが、消された状態のまま保存されてしまいました。変更を捨てて閉じるのは <code>:q!</code> です。「最初からやり直す」で再挑戦できます。' : '' },
   { id:'insert', title:'文字を入力して保存する', file:'hello.txt', lines:[''], isNew:true,
-    goal:'空のファイルに <code>Hello vi</code> と1行だけ入力し、保存して終了してください。',
+    goal:'新しいファイル <code>hello.txt</code> を作り、<code>Hello vi</code> と1行だけ入力して、保存して終了してください。',
     target:['Hello vi'],
-    hints:['<code>i</code> で挿入モードに入ります（画面下に -- INSERT --）。','打ち終わったら <code>Esc</code> でノーマルモードへ。','<code>:wq</code> で保存して終了します。'],
+    hints:['存在しないファイル名で <code>vi hello.txt</code> と開くと、新しいファイルになります（画面下に [New]）。','<code>i</code> で挿入モードに入ります（画面下に -- INSERT --）。','打ち終わったら <code>Esc</code> でノーマルモードへ。','<code>:wq</code> で保存して終了します。'],
     check:S => S.exited && eq(S.saved, ['Hello vi']) },
   { id:'move', title:'移動して1文字消す', file:'app.conf', lines:['server_name = test01','port = 8080','log_level = deXbug','max_clients = 100','timeout = 30'],
-    goal:'3行目に紛れ込んだ <code>X</code> を消して保存してください（<code>:w</code> でも <code>:wq</code> でも可）。',
+    goal:'<b>カーソル移動</b>の練習です。<code>h j k l</code> や <code>w</code> で3行目の <code>X</code> までカーソルを動かし、<code>x</code> で1文字消して保存してください（<code>:w</code> でも <code>:wq</code> でも可）。',
     target:['server_name = test01','port = 8080','log_level = debug','max_clients = 100','timeout = 30'], hl:[2],
     hints:['<code>j</code> で下の行へ、<code>l</code> や <code>w</code> で右へ移動します。','<code>2j</code> のように数字を付けると、その回数だけ動きます。','X の上で <code>x</code> を押すと1文字削除。'],
     check:S => eq(S.saved, ['server_name = test01','port = 8080','log_level = debug','max_clients = 100','timeout = 30']) },
   { id:'dd', title:'不要な行をまとめて削除', file:'app.conf', lines:APP,
-    goal:'8〜10行目の <code>legacy_</code> で始まる3行を削除して保存してください。',
+    goal:'<b>行番号で移動して、まとめて削除する</b>練習です。<code>8G</code> で8行目へ飛び、<code>3dd</code> で <code>legacy_</code> で始まる3行を一度に削除して保存してください。',
     target:APP.slice(0,7),
     hints:['<code>:set nu</code> で行番号を出すと分かりやすくなります。','<code>8G</code> で8行目へ移動。','<code>3dd</code> で3行削除。間違えたら <code>u</code>。'],
     check:S => eq(S.saved, APP.slice(0,7)) },
   { id:'cw', title:'設定値を書き換える', file:'app.conf', lines:APP,
-    goal:'<code>port = 8080</code> を <code>port = 80</code> に書き換えて保存してください。',
+    goal:'<b>検索で目的の場所へ飛ぶ</b>練習です。<code>/8080</code> で検索して <code>8080</code> にカーソルを移動し、<code>cw</code> で <code>80</code> に書き換えて保存してください。',
     target:APP.map(l=>l==='port = 8080'?'port = 80':l), hl:[2],
     hints:['<code>/8080</code> と打って Enter で、8080 へ一気に飛べます。','<code>cw</code> で単語を消して挿入モードに入ります。','<code>80</code> と打って <code>Esc</code>、<code>:w</code>。'],
     check:S => eq(S.saved, APP.map(l=>l==='port = 8080'?'port = 80':l)) },
   { id:'o', title:'設定を1行追加する', file:'app.conf', lines:APP,
-    goal:'<code>timeout = 30</code> の<b>下</b>に、<code>keepalive = on</code> という行を追加して保存してください。',
+    goal:'<b>行を追加する</b>練習です。<code>timeout = 30</code> の行で <code>o</code> を押し、その下に <code>keepalive = on</code> という行を追加して保存してください。',
     target:[...APP.slice(0,6),'keepalive = on',...APP.slice(6)], hl:[6],
     hints:['<code>6G</code> で timeout の行へ。','<code>o</code> で下に新しい行を作って挿入モードになります。','入力したら <code>Esc</code>、<code>:w</code>。'],
     check:S => eq(S.saved, [...APP.slice(0,6),'keepalive = on',...APP.slice(6)]) },
   { id:'yy', title:'行を複製して少し変える', file:'hosts.allow', lines:['# allowed clients','allow = 192.168.1.10','deny = all'],
-    goal:'2行目を複製して、複製した行の末尾を <code>10</code> から <code>11</code> に変えて保存してください。',
+    goal:'<b>コピーと貼り付け</b>の練習です。2行目を <code>yy</code> でコピーして <code>p</code> で下に貼り付け、貼り付けた行の末尾を <code>10</code> から <code>11</code> に変えて保存してください。',
     target:['# allowed clients','allow = 192.168.1.10','allow = 192.168.1.11','deny = all'], hl:[2],
     hints:['2行目で <code>yy</code> → <code>p</code> で下に複製。','<code>$</code> で行末（最後の 0）へ。','<code>r1</code> でカーソル位置の1文字を 1 に置き換え。'],
     check:S => eq(S.saved, ['# allowed clients','allow = 192.168.1.10','allow = 192.168.1.11','deny = all']) },
   { id:'sub', title:'まとめて置換する', file:'links.txt', lines:['top: http://example.com/','docs: http://example.com/docs','api: http://api.example.com/ (old: http://old.example.com/)','contact: mailto:info@example.com'],
-    goal:'ファイル中の <code>http://</code> をすべて <code>https://</code> に置換して保存してください。3行目には2か所あります。',
+    goal:'<b>置換コマンド</b>の練習です。<code>:%s</code> を使って、ファイル中の <code>http://</code> をまとめて <code>https://</code> に置換し、保存してください。3行目には2か所あります。',
     target:['top: https://example.com/','docs: https://example.com/docs','api: https://api.example.com/ (old: https://old.example.com/)','contact: mailto:info@example.com'], hl:[0,1,2],
     hints:['置換は <code>:%s/前/後/g</code>。','区切りの <code>/</code> と URL の <code>/</code> がぶつかるので、<code>http:</code> → <code>https:</code> と置換するのが簡単です。','末尾の <code>g</code> を忘れると、各行の最初の1つしか変わりません。'],
     check:S => eq(S.saved, ['top: https://example.com/','docs: https://example.com/docs','api: https://api.example.com/ (old: https://old.example.com/)','contact: mailto:info@example.com']) },
   { id:'undo', title:'消えた行を取り戻す', file:'app.conf', lines:APP,
-    setup:[':','s','e','t',' ','n','u','Enter','3','G','2','d','d'],
+    setup:[':','s','e','t',' ','n','u','Enter','3','G','2','d','d'], startInVi:true,
     goal:'うっかり3〜4行目を消してしまいました。<code>u</code> で元に戻してから、保存して終了してください（<code>:q!</code> は不可）。',
     target:APP, hl:[2,3],
     hints:['ノーマルモードで <code>u</code> を押すと直前の変更を取り消します。','戻りすぎたら <code>Ctrl+R</code> でやり直し。','最後は <code>:wq</code>。'],
     check:S => S.exited && S.exitBy==='write' && eq(S.saved, APP) },
   { id:'final', title:'総合問題：設定変更', file:'app.conf', lines:APP,
-    goal:'次の4つをすべて行い、保存して終了してください。<br>① port を 80 に ② log_level を info に ③ timeout の下に <code>keepalive = on</code> を追加 ④ legacy_ の3行を削除',
+    goal:'これまでの<b>総まとめ</b>です。検索・書き換え・置換・行の追加と削除を組み合わせて、次の4つをすべて行い、保存して終了してください。<br>① port を 80 に ② log_level を info に ③ timeout の下に <code>keepalive = on</code> を追加 ④ legacy_ の3行を削除',
     target:['# sample config','server_name = test01','port = 80','log_level = info','max_clients = 100','timeout = 30','keepalive = on','# legacy settings'], hl:[2,3,6],
     hints:['順番は自由。行番号が変わる操作（追加・削除）は後回しにすると楽です。','<code>:%s/debug/info/</code> や <code>cw</code> を活用。','間違えたら <code>u</code>、全部やり直すなら <code>:e!</code>。'],
     check:S => S.exited && eq(S.saved, ['# sample config','server_name = test01','port = 80','log_level = info','max_clients = 100','timeout = 30','keepalive = on','# legacy settings']) },
   { id:'free', title:'自由練習', file:'app.conf', lines:APP, free:true,
-    goal:'課題はありません。早見表のコマンドを自由に試してください。<code>:q!</code> で終了しても、<code>Enter</code> でもう一度開けます。',
+    goal:'課題はありません。早見表のコマンドを自由に試してください。<code>:q!</code> で終了しても、<code>vi app.conf</code> でもう一度開けます。<code>ls</code> や <code>cat</code> も使えます。',
     hints:['<code>dw</code> や <code>d$</code> のように「動詞＋移動」を組み合わせてみましょう。','<code>.</code> で直前の変更を繰り返せます。'],
     check:() => false },
 ];
@@ -358,14 +368,80 @@ function fresh(m){
     undo:[], redo:[], seq:0, reg:{lines:[''], linewise:false}, search:'', sdir:1, nu:false, top:0,
     exited:false, exitBy:'', rec:null, last:null, didChange:false, insSnap:null, replay:false, cleared:false };
 }
+let SH;
 function load(i){
   mi = i; try { localStorage.setItem('viDojoCur', String(i)); } catch(e) {}
   const m = MISSIONS[i];
-  S = fresh(m);
-  if (m.setup){ for (const k of m.setup) dispatch(k); S.msg = m.id==='discard' ? '' : S.msg; if (m.id==='undo') S.msg = ''; S.msgType=''; S.last=null; }
+  const fs = {}; if (!m.isNew) fs[m.file] = [...m.lines];
+  SH = { fs, initial:new Set(Object.keys(fs)), hist:[], input:'', cmdHist:[], hIdx:-1, lastExit:null, cleared:false };
+  if (m.startInVi){
+    SH.hist.push({prompt:true, text:'vi '+m.file});
+    S = fresh(m);
+    for (const k of m.setup) dispatch(k);
+    S.msg=''; S.msgType=''; S.last=null;
+  } else {
+    S = null;
+    SH.hist.push({dim:true, text:'# 練習用のシェルです。ls / cat / vi / rm / clear / help が使えます'});
+  }
   keylog.length = 0;
   renderMission(); render();
 }
+/* ================= mini shell ================= */
+const PROMPT='tanaka@ubuntu:~$';
+function out(t, cls){ SH.hist.push({text:t, cls}); }
+function openVi(file){
+  if (SH.fs[file]) S = fresh({file, lines:SH.fs[file]});
+  else S = fresh({file, lines:[''], isNew:true});
+}
+function lsLong(f){ const b = bytes(SH.fs[f]); return `-rw-r--r-- 1 tanaka tanaka ${String(b).padStart(5,' ')} Oct  6 10:00 ${f}`; }
+function runShell(line){
+  SH.hist.push({prompt:true, text:line});
+  const t = line.trim(); if (!t) return;
+  SH.cmdHist.push(t); SH.hIdx=-1;
+  let a = t.split(/\s+/); if (a[0]==='sudo') a = a.slice(1); if (!a.length) return;
+  const cmd=a[0], args=a.slice(1).filter(x=>!x.startsWith('-')), opts=a.slice(1).filter(x=>x.startsWith('-')).join('');
+  const files = Object.keys(SH.fs).sort();
+  switch(cmd){
+    case 'vi': case 'vim': case 'view':
+      if (!args.length){ out('練習機では vi のあとにファイル名を付けてください（例: vi app.conf）','warn'); return; }
+      openVi(args[0]); return;
+    case 'ls': case 'll': case 'dir':
+      if (cmd==='ll' || opts.includes('l')){ if (opts.includes('a')||cmd==='ll'){ out('drwxr-x--- 2 tanaka tanaka  4096 Oct  6 10:00 .'); out('drwxr-xr-x 3 root   root    4096 Oct  6 09:00 ..'); } files.forEach(f=>out(lsLong(f))); return; }
+      out((opts.includes('a') ? ['.','..',...files] : files).join('  ')); return;
+    case 'cat': case 'less': case 'more': case 'head': case 'tail':
+      if (!args.length){ out(cmd+': 練習機ではファイル名を付けてください','warn'); return; }
+      for (const f of args){ if (SH.fs[f]) SH.fs[f].forEach(l=>out(l)); else out(`${cmd}: ${f}: No such file or directory`,'err'); } return;
+    case 'rm':
+      for (const f of args){ if (SH.fs[f]) delete SH.fs[f]; else out(`rm: cannot remove '${f}': No such file or directory`,'err'); } return;
+    case 'clear': SH.hist=[]; return;
+    case 'pwd': out('/home/tanaka'); return;
+    case 'whoami': out('tanaka'); return;
+    case 'cd': return;
+    case 'echo': out(a.slice(1).join(' ')); return;
+    case 'help': out('使えるコマンド: vi ファイル名 / ls [-l] / cat ファイル名 / rm ファイル名 / clear / pwd','warn'); return;
+    case 'nano': case 'emacs': case 'vscode': case 'code': out('この練習機では vi だけが使えます','warn'); return;
+    case 'exit': case 'logout': out('練習機ではログアウトできません。左のミッションを続けましょう','warn'); return;
+  }
+  out(`-bash: ${cmd}: command not found`,"err");
+}
+function complete(){
+  const parts = SH.input.split(' '); const last = parts[parts.length-1];
+  const pool = parts.length===1 ? ['vi','vim','ls','cat','rm','clear','pwd','help'] : Object.keys(SH.fs);
+  const hits = pool.filter(x=>x.startsWith(last));
+  if (hits.length===1){ parts[parts.length-1]=hits[0]+(parts.length===1?' ':''); SH.input=parts.join(' '); }
+  else if (hits.length>1){ SH.hist.push({prompt:true, text:SH.input}); out(hits.join('  ')); }
+}
+function shellKey(k){
+  if (k==='Enter'){ const l=SH.input; SH.input=''; runShell(l); return; }
+  if (k==='Backspace'){ SH.input=SH.input.slice(0,-1); return; }
+  if (k==='C-c'||k==='Esc'){ if (k==='C-c'){ SH.hist.push({prompt:true, text:SH.input+'^C'}); SH.input=''; } return; }
+  if (k==='C-l'){ SH.hist=[]; return; }
+  if (k==='Tab'){ complete(); return; }
+  if (k==='Up'){ if (!SH.cmdHist.length) return; SH.hIdx = SH.hIdx<0 ? SH.cmdHist.length-1 : Math.max(0,SH.hIdx-1); SH.input=SH.cmdHist[SH.hIdx]; return; }
+  if (k==='Down'){ if (SH.hIdx<0) return; SH.hIdx++; if (SH.hIdx>=SH.cmdHist.length){ SH.hIdx=-1; SH.input=''; } else SH.input=SH.cmdHist[SH.hIdx]; return; }
+  if (k.length===1) SH.input+=k;
+}
+
 function snap(){ S.undo.push({lines:[...S.lines], r:S.r, c:S.c}); S.redo=[]; S.seq++; S.didChange=true; }
 const modified = () => !eq(S.lines, S.saved);
 const L = () => S.lines;
@@ -499,14 +575,15 @@ function put(before, n){
 function enterInsert(noSnap){ if(!noSnap) snap(); S.insSnap = S.undo.length; S.mode='insert'; setMsg(''); }
 
 /* ---------- ex commands ---------- */
-function write(){ S.saved=[...S.lines]; setMsg(`"${S.file}" ${S.lines.length}L, ${bytes(S.lines)}B written`); }
-function exitVi(by){ S.exited=true; S.exitBy=by; S.mode='normal'; }
+function write(name){ const f=name||S.file; const isNew=!SH.fs[f]; SH.fs[f]=[...S.lines]; if (!name) S.saved=[...S.lines]; setMsg(`"${f}"${isNew?' [New]':''} ${S.lines.length}L, ${bytes(S.lines)}B written`); }
+function exitVi(by){ SH.lastExit={file:S.file, by}; S=null; }
 function ex(cmd){
   const c = cmd.trim();
   if (c==='') return;
   if (/^\d+$/.test(c)){ S.r=Math.min(parseInt(c,10),S.lines.length)-1; if(S.r<0)S.r=0; S.c=firstNB(S.r); return; }
   if (c==='$'){ S.r=S.lines.length-1; S.c=firstNB(S.r); return; }
   if (c==='w' || c==='w!'){ write(); return; }
+  { const mw = c.match(/^w!?\s+(\S+)$/); if (mw){ write(mw[1]); return; } }
   if (c==='wq' || c==='x' || c==='wq!' || c==='x!'){ const was = modified() || c.startsWith('wq'); if (was) write(); exitVi('write'); return; }
   if (c==='q'){ if (modified()){ setMsg('E37: No write since last change (add ! to override)','err'); return; } exitVi('quit'); return; }
   if (c==='q!' || c==='qa!'){ exitVi('discard'); return; }
@@ -549,7 +626,7 @@ function splitDelim(s, d){ const out=['']; for (let i=0;i<s.length;i++){ if (s[i
 /* ---------- key handlers ---------- */
 function normalKey(k){
   if (S.rp){ S.rp=false; if (k.length===1 && len(S.r)>0){ const n=Math.max(1,parseInt(S.count||'1',10)); S.count=''; if (S.c+n<=len(S.r)){ snap(); const l=S.lines[S.r]; S.lines[S.r]=l.slice(0,S.c)+k.repeat(n)+l.slice(S.c+n); S.c+=n-1; } } else S.count=''; return; }
-  if (S.z){ S.z=false; if (k==='Z'){ ex('x'); } else if (k==='Q'){ ex('q!'); } S.count=''; return; }
+  if (S.z){ S.z=false; S.count=''; if (k==='Z'){ ex('x'); } else if (k==='Q'){ ex('q!'); } return; }
   if (/^[1-9]$/.test(k) || (k==='0' && (S.count!=='' ))){ S.count+=k; return; }
   const hasCount = S.count!=='' || S.opCount!=='';
   const n = Math.max(1,parseInt(S.count||'1',10)) * Math.max(1,parseInt(S.opCount||'1',10));
@@ -643,47 +720,46 @@ function commandKey(k){
   if (k.length===1) S.cmd+=k;
 }
 function dispatch(k){
-  if (S.exited){ return; }
+  if (!S){ shellKey(k); return; }
   if (S.mode==='insert') insertKey(k);
   else if (S.mode==='command') commandKey(k);
   else normalKey(k);
-  if (!S.exited) clamp();
+  if (S) clamp();
 }
 
 /* ---------- top-level key entry with change recording (for .) ---------- */
 const keylog = [];
-function pending(){ return S.count!=='' || S.op || S.g || S.z || S.rp; }
+function pending(){ return S && (S.count!=='' || S.op || S.g || S.z || S.rp); }
 function handle(k){
-  keylog.push({k, mode:S.exited?'shell':S.mode}); if (keylog.length>24) keylog.shift();
-  if (S.exited){ if (k==='Enter') reopen(); render(); return; }
+  keylog.push({k, mode:S?S.mode:'shell'}); if (keylog.length>24) keylog.shift();
+  if (!S){ shellKey(k); render(); check(); return; }
   if (S.mode==='normal' && !pending() && k!=='.'){ S.rec=[]; S.didChange=false; }
   if (S.rec && S.mode!=='command') S.rec.push(k);
   if (S.mode==='normal' && !pending() && k!=='Esc' && !(k===':'||k==='/'||k==='?')) { if (S.msgType!=='err' || true) { S.msg=''; S.msgType=''; } }
   dispatch(k);
-  if (S.mode==='command') S.rec=null;
-  if (S.mode==='normal' && !pending() && S.rec){ if (S.didChange && k!=='.') S.last=S.rec; S.rec=null; }
+  if (S && S.mode==='command') S.rec=null;
+  if (S && S.mode==='normal' && !pending() && S.rec){ if (S.didChange && k!=='.') S.last=S.rec; S.rec=null; }
   render(); check();
 }
-function reopen(){ const m=MISSIONS[mi]; const saved=[...S.saved]; const nu=S.nu; S = fresh({...m, lines:saved, isNew:false}); S.nu=nu; render(); }
 
 /* ================= rendering ================= */
 const screenEl=$('screen'), statusEl=$('status'), termEl=$('term');
 function render(){
   const term = termEl;
-  $('termTitle').textContent = S.exited ? 'tanaka@ubuntu: ~' : 'vi '+S.file+(modified()?' [+]':'');
+  $('termTitle').textContent = !S ? 'tanaka@ubuntu: ~' : 'vi '+S.file+(modified()?' [+]':'');
   term.classList.remove('insert','command','shell');
   const chip=$('modeChip'), help=$('modeHelp');
   chip.className='mode-chip';
-  if (S.exited){
+  if (!S){
     term.classList.add('shell'); chip.classList.add('shell'); chip.textContent='SHELL';
-    help.innerHTML='viを終了しました。端末をクリックして <kbd>Enter</kbd> を押すと、保存された内容で同じファイルをもう一度開けます。';
-    const how = S.exitBy==='discard' ? '（変更は破棄されました）' : S.exitBy==='write' ? '（保存して終了しました）' : '';
-    const cat = S.saved.map(l=>esc(l)).join('\n');
-    screenEl.innerHTML = `<div class="shell-line"><span class="p">tanaka@ubuntu:~$</span> vi ${esc(S.file)}</div><div class="shell-line" style="color:var(--term-dim)">${how}</div><div class="shell-line"><span class="p">tanaka@ubuntu:~$</span> cat ${esc(S.file)}</div><div>${cat||'&nbsp;'}</div><div class="shell-line"><span class="p">tanaka@ubuntu:~$</span> <span class="cur"> </span></div>`;
-    statusEl.style.visibility='hidden';
+    help.innerHTML='シェル：<kbd>vi ファイル名</kbd> でファイルを開きます。<kbd>ls</kbd> で一覧、<kbd>cat</kbd> で中身を表示。';
+    const rows = SH.hist.map(h => h.prompt ? `<div class="row shell-line"><span class="p">${PROMPT}</span> ${esc(h.text)}</div>` : `<div class="row ${h.cls?'sh-'+h.cls:''}${h.dim?' sh-dim':''}">${esc(h.text)||' '}</div>`);
+    rows.push(`<div class="row shell-line"><span class="p">${PROMPT}</span> ${esc(SH.input)}<span class="cur"> </span></div>`);
+    screenEl.innerHTML = rows.slice(-(ROWS+1)).join('');
+    statusEl.style.display='none';
     renderLog(); return;
   }
-  statusEl.style.visibility='visible';
+  statusEl.style.display='';
   if (S.mode==='insert'){ term.classList.add('insert'); chip.classList.add('insert'); chip.textContent='INSERT'; help.innerHTML='挿入モード：打った文字がそのまま入力されます。終わったら <kbd>Esc</kbd>。'; }
   else if (S.mode==='command'){ term.classList.add('command'); chip.classList.add('command'); chip.textContent='COMMAND'; help.innerHTML='コマンドラインモード：画面最下行に入力して <kbd>Enter</kbd>。やめるなら <kbd>Esc</kbd>。'; }
   else { chip.textContent='NORMAL'; help.innerHTML='ノーマルモード：キーは命令になります。文字を打つなら <kbd>i</kbd>、保存や終了は <kbd>:</kbd>。'; }
@@ -743,6 +819,7 @@ function renderMission(){
     <div class="mission-eyebrow">${n}</div>
     <h2 class="mission-title">${m.title}</h2>
     <p class="goal">${m.goal}</p>
+    <p class="start-line">${m.startInVi ? '▶ このミッションは<b>編集中の画面</b>から始まります' : `▶ シェルで <code>vi ${esc(m.file)}</code> と打って開きます`}</p>
     ${targetHtml(m)}
     <details class="hint"><summary>ヒントを見る</summary><ol>${m.hints.map(h=>`<li>${h}</li>`).join('')}</ol></details>
     <div class="miss-note" id="missNote" hidden></div>
@@ -763,10 +840,17 @@ function renderList(){
 }
 function check(){
   const m = MISSIONS[mi];
-  if (m.free || done[m.id] && S.cleared) return;
+  if (m.free || (done[m.id] && SH.cleared)) return;
+  const C = { exited: !S && !!SH.lastExit && SH.lastExit.file===m.file, exitBy: SH.lastExit ? SH.lastExit.by : '', saved: SH.fs[m.file] || [] };
+  const ok = m.check(C);
   const note=$('missNote');
-  if (note){ const t = (!m.check(S) && m.miss) ? m.miss(S) : ''; note.innerHTML=t; note.hidden=!t; }
-  if (m.check(S)){ S.cleared = true; if (!done[m.id]){ done[m.id]=true; saveDone(); } const f=$('flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); renderMission(); }
+  if (note){
+    let t = (!ok && m.miss) ? m.miss(C) : '';
+    const extra = Object.keys(SH.fs).filter(f => !SH.initial.has(f) && f!==m.file);
+    if (!ok && !t && extra.length) t = `<code>${esc(extra[0])}</code> という新しいファイルができています。ファイル名を打ち間違えると、viは空の新しいファイルとして開きます。シェルで <code>rm ${esc(extra[0])}</code> と打てば消せます。`;
+    note.innerHTML=t; note.hidden=!t;
+  }
+  if (ok){ SH.cleared = true; if (!done[m.id]){ done[m.id]=true; saveDone(); } const f=$('flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); renderMission(); }
 }
 
 /* ================= input ================= */
