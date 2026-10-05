@@ -105,6 +105,8 @@ button{font-family:var(--font-ui); font-size:13.5px; border-radius:3px; border:1
 button:hover{border-color:var(--accent); box-shadow:0 0 10px rgba(54,230,255,.35);}
 button:focus-visible, summary:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
 button.primary{background:linear-gradient(90deg, rgba(54,230,255,.25), rgba(255,61,168,.25)); border-color:var(--accent); color:#fff; box-shadow:0 0 14px rgba(54,230,255,.35);}
+.miss-note{margin-top:12px; font-size:13.5px; color:var(--command); background:rgba(255,181,71,.10); border:1px solid rgba(255,181,71,.45); border-radius:3px; padding:8px 12px;}
+.miss-note code{font-family:var(--font-mono); color:var(--command);}
 .clear-banner{display:flex; align-items:center; gap:10px; background:var(--ok-soft); color:var(--ok); border:1px solid rgba(67,245,168,.4); border-radius:3px; padding:8px 12px; font-family:var(--font-mono); font-weight:700; letter-spacing:.08em; margin-bottom:12px; text-shadow:0 0 8px rgba(67,245,168,.6);}
 
 .mlist{list-style:none; margin:0; padding:0; display:flex; flex-direction:column;}
@@ -114,6 +116,10 @@ button.primary{background:linear-gradient(90deg, rgba(54,230,255,.25), rgba(255,
 .mlist .no{font-family:var(--font-mono); font-size:12px; color:var(--fg-faint); font-variant-numeric:tabular-nums;}
 .mlist .st{font-size:12px; color:var(--fg-faint); font-family:var(--font-mono);}
 .mlist .st.done{color:var(--ok); font-weight:700; text-shadow:0 0 8px rgba(67,245,168,.7);}
+.reset-all{border-top:1px dashed var(--line); margin-top:10px; padding-top:12px; display:flex; flex-direction:column; gap:8px;}
+.reset-all > button{align-self:flex-start; font-size:12.5px; color:var(--fg-soft);}
+.reset-confirm{display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:13px; color:var(--danger);}
+button.danger{border-color:var(--danger); color:var(--danger);}
 .list-head{font-size:12px; letter-spacing:.14em; color:var(--fg-faint); text-transform:uppercase; font-family:var(--font-mono); margin:0 0 6px 8px;}
 
 /* ---- terminal ---- */
@@ -190,6 +196,14 @@ details.ref summary{cursor:pointer; font-weight:700;}
       <nav class="card" aria-label="ミッション一覧">
         <p class="list-head">ミッション</p>
         <ul class="mlist" id="mlist"></ul>
+        <div class="reset-all">
+          <button type="button" id="resetAll">すべての記録をリセット</button>
+          <div class="reset-confirm" id="resetConfirm" hidden>
+            <span>クリア記録をすべて消しますか？</span>
+            <button type="button" id="resetYes" class="danger">消す</button>
+            <button type="button" id="resetNo">やめる</button>
+          </div>
+        </div>
       </nav>
     </aside>
 
@@ -267,12 +281,14 @@ const MISSIONS = [
   { id:'quit', title:'viから抜け出す', file:'memo.txt', lines:['Hello vi','This is my first memo.'],
     goal:'まずは「閉じ方」から。何も変更せずに、viを終了してください。',
     hints:['起動直後はノーマルモードです。','<code>:q</code> と打って <code>Enter</code> を押します。'],
-    check:S => S.exited },
+    check:S => S.exited && S.exitBy!=='write',
+    miss:S => S.exited && S.exitBy==='write' ? '終了はできましたが、<code>:wq</code> や <code>:x</code>、<code>ZZ</code> は「保存して終了」です。変更していないファイルを閉じるだけなら <code>:q</code> を使いましょう。「最初からやり直す」で再挑戦できます。' : '' },
   { id:'discard', title:'変更を捨てて終了する', file:'memo.txt', lines:['Hello vi','This is my first memo.'],
     setup:['G','d','d'],
     goal:'誰かが2行目を消してしまった状態です。この変更は<b>保存せずに</b>終了してください。',
     hints:['<code>:q</code> だと E37 のエラーで閉じられません。','変更を捨てて閉じるのは <code>:q!</code> です。'],
-    check:S => S.exited && eq(S.saved, ['Hello vi','This is my first memo.']) },
+    check:S => S.exited && eq(S.saved, ['Hello vi','This is my first memo.']),
+    miss:S => S.exited && !eq(S.saved, ['Hello vi','This is my first memo.']) ? '終了はできましたが、消された状態のまま保存されてしまいました。変更を捨てて閉じるのは <code>:q!</code> です。「最初からやり直す」で再挑戦できます。' : '' },
   { id:'insert', title:'文字を入力して保存する', file:'hello.txt', lines:[''], isNew:true,
     goal:'空のファイルに <code>Hello vi</code> と1行だけ入力し、保存して終了してください。',
     target:['Hello vi'],
@@ -729,11 +745,12 @@ function renderMission(){
     <p class="goal">${m.goal}</p>
     ${targetHtml(m)}
     <details class="hint"><summary>ヒントを見る</summary><ol>${m.hints.map(h=>`<li>${h}</li>`).join('')}</ol></details>
+    <div class="miss-note" id="missNote" hidden></div>
     <div class="card-actions">
       <button type="button" id="resetBtn">最初からやり直す</button>
       ${mi<MISSIONS.length-1 ? `<button type="button" id="nextBtn" class="${cleared?'primary':''}">次のミッション →</button>` : ''}
     </div>`;
-  $('resetBtn').onclick = () => { load(mi); focusKb(); };
+  $('resetBtn').onclick = () => { if (done[m.id]){ delete done[m.id]; saveDone(); } load(mi); focusKb(); };
   const nb=$('nextBtn'); if (nb) nb.onclick = () => { load(mi+1); focusKb(); };
   renderList();
 }
@@ -747,6 +764,8 @@ function renderList(){
 function check(){
   const m = MISSIONS[mi];
   if (m.free || done[m.id] && S.cleared) return;
+  const note=$('missNote');
+  if (note){ const t = (!m.check(S) && m.miss) ? m.miss(S) : ''; note.innerHTML=t; note.hidden=!t; }
   if (m.check(S)){ S.cleared = true; if (!done[m.id]){ done[m.id]=true; saveDone(); } const f=$('flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); renderMission(); }
 }
 
@@ -799,6 +818,9 @@ document.querySelectorAll('.keys button').forEach(b => {
   draw();
 })();
 
+$('resetAll').onclick = () => { $('resetConfirm').hidden = false; };
+$('resetNo').onclick = () => { $('resetConfirm').hidden = true; };
+$('resetYes').onclick = () => { done = {}; saveDone(); $('resetConfirm').hidden = true; load(0); focusKb(); };
 load(mi);
 focusKb();
 })();
