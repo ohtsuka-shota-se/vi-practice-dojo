@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="description" content="ブラウザで動くviの練習機。ミッションを解きながらモード切替・移動・編集・保存と終了を体験できます。">
+<title>vi練習道場</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&family=IBM+Plex+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;600;700&family=BIZ+UDGothic:wght@400;700&display=swap">
+<style>
+html,body{margin:0;}
+img{max-width:100%;}
+[hidden]{display:none!important;}
+/* Layout: 夜のサーバールーム。暗い藍の地にネオンのグリッドと流れるviコマンド。左にミッション、右に光る端末。モード色 ミント=ノーマル / 青=挿入 / 琥珀=コマンドライン。単一のダークテーマで統一 */
+:root{
+  color-scheme:dark;
+  --bg:#070A16;
+  --bg-2:#0C1124;
+  --surface:rgba(14,20,42,.78);
+  --surface-2:rgba(40,56,104,.35);
+  --fg:#E6ECFF;
+  --fg-soft:#A3AECF;
+  --fg-faint:#6B76A0;
+  --line:rgba(98,128,220,.28);
+  --accent:#36E6FF;
+  --accent-2:#FF3DA8;
+  --accent-soft:rgba(54,230,255,.12);
+  --ok:#43F5A8;
+  --ok-soft:rgba(67,245,168,.12);
+  --normal:#43F5A8;
+  --insert:#5AA8FF;
+  --command:#FFB547;
+  --danger:#FF6B8B;
+  --term-bg:#04060E;
+  --term-fg:#D9F3FF;
+  --term-dim:#3F5579;
+  --term-status:#0B1430;
+  --term-err:#FF7A95;
+  --term-ok:#5CFFB8;
+  --term-warn:#FFC86B;
+  --term-cursor:#36E6FF;
+  --glow:0 0 12px rgba(54,230,255,.55), 0 0 32px rgba(54,230,255,.25);
+  --font-display:'DotGothic16','BIZ UDGothic',monospace;
+  --font-ui:'IBM Plex Sans JP',-apple-system,'Hiragino Sans','Noto Sans JP',sans-serif;
+  --font-mono:'JetBrains Mono','BIZ UDGothic',Consolas,Menlo,monospace;
+}
+*{box-sizing:border-box;}
+html,body{background:var(--bg); color:var(--fg);}
+body{font-family:var(--font-ui); font-size:15px; line-height:1.7; padding-inline:16px; padding-block:24px 56px; position:relative; min-height:100%; overflow-x:hidden;}
+/* ---- background layers ---- */
+.bg{position:fixed; inset:0; z-index:0; pointer-events:none; overflow:hidden;
+  background:
+    radial-gradient(900px 500px at 12% -10%, rgba(255,61,168,.22), transparent 60%),
+    radial-gradient(900px 600px at 95% 10%, rgba(54,230,255,.20), transparent 60%),
+    radial-gradient(700px 500px at 50% 110%, rgba(90,120,255,.25), transparent 60%),
+    linear-gradient(180deg, var(--bg-2), var(--bg));}
+.bg .grid-floor{position:absolute; left:-50%; right:-50%; bottom:-10%; height:55%;
+  background-image:linear-gradient(rgba(54,230,255,.35) 1px, transparent 1px), linear-gradient(90deg, rgba(54,230,255,.35) 1px, transparent 1px);
+  background-size:56px 56px; transform:perspective(420px) rotateX(62deg); transform-origin:center top;
+  mask-image:linear-gradient(180deg, transparent, #000 35%, #000 70%, transparent);
+  -webkit-mask-image:linear-gradient(180deg, transparent, #000 35%, #000 70%, transparent);
+  animation:floor 6s linear infinite; opacity:.55;}
+@keyframes floor{ to{ background-position:0 56px, 0 0; } }
+.bg .dots{position:absolute; inset:0; background-image:radial-gradient(rgba(150,180,255,.18) 1px, transparent 1px); background-size:24px 24px; mask-image:linear-gradient(180deg,#000,transparent 60%); -webkit-mask-image:linear-gradient(180deg,#000,transparent 60%);}
+#rain{position:absolute; inset:0; width:100%; height:100%; opacity:.5;}
+.wrap{position:relative; z-index:1; max-width:1160px; margin:0 auto; display:flex; flex-direction:column; gap:22px;}
+
+/* ---- header ---- */
+header.top{display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:14px 24px;}
+.sys{font-family:var(--font-mono); font-size:12px; letter-spacing:.14em; color:var(--accent); text-transform:uppercase; margin:0 0 6px; display:flex; align-items:center; gap:8px;}
+.sys .dot{width:8px; height:8px; border-radius:50%; background:var(--ok); box-shadow:0 0 10px var(--ok); animation:blink 1.6s steps(2) infinite;}
+@keyframes blink{ 50%{opacity:.25;} }
+header.top h1{margin:0; font-family:var(--font-display); font-weight:400; font-size:clamp(2rem, 6vw, 3.1rem); line-height:1.1; letter-spacing:.02em; color:#fff; position:relative;
+  text-shadow:0 0 6px rgba(54,230,255,.9), 0 0 22px rgba(54,230,255,.6), 2px 0 0 rgba(255,61,168,.7), -2px 0 0 rgba(54,230,255,.7);}
+header.top h1 .prompt{color:var(--accent-2); text-shadow:0 0 10px rgba(255,61,168,.8);}
+header.top h1 .caret{display:inline-block; width:.5em; height:.9em; vertical-align:-.08em; background:var(--accent); box-shadow:var(--glow); margin-left:.12em; animation:blink 1s steps(2) infinite;}
+header.top p{margin:10px 0 0; color:var(--fg-soft); max-width:62ch;}
+.progress-pill{font-family:var(--font-mono); font-size:13px; color:var(--fg-soft); background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:8px 14px; font-variant-numeric:tabular-nums; white-space:nowrap; backdrop-filter:blur(6px); display:flex; flex-direction:column; gap:6px; min-width:180px;}
+.progress-pill b{color:var(--ok); text-shadow:0 0 8px rgba(67,245,168,.7);}
+.meter{height:6px; background:rgba(255,255,255,.08); border-radius:3px; overflow:hidden;}
+.meter i{display:block; height:100%; width:0; background:linear-gradient(90deg,var(--accent),var(--ok)); box-shadow:0 0 10px var(--accent); transition:width .5s;}
+
+.grid{display:grid; grid-template-columns:minmax(0,340px) minmax(0,1fr); gap:22px; align-items:start;}
+@media (max-width:880px){ .grid{grid-template-columns:minmax(0,1fr);} }
+
+/* ---- panels ---- */
+.side{display:flex; flex-direction:column; gap:16px; min-width:0;}
+.card{position:relative; background:var(--surface); border:1px solid var(--line); border-radius:4px; padding:18px; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  clip-path:polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));}
+.card::before{content:""; position:absolute; top:0; left:0; width:40%; height:2px; background:linear-gradient(90deg,var(--accent),transparent); box-shadow:var(--glow);}
+.mission-eyebrow{font-family:var(--font-mono); font-size:12px; letter-spacing:.14em; color:var(--accent-2); text-transform:uppercase; text-shadow:0 0 8px rgba(255,61,168,.6);}
+.mission-title{margin:4px 0 10px; font-size:1.25rem; font-weight:700; text-wrap:balance;}
+.goal{margin:0 0 12px; font-size:14.5px;}
+.goal code, .hint code, .ref code{font-family:var(--font-mono); font-size:.9em; background:var(--surface-2); color:var(--accent); border-radius:3px; padding:0 5px;}
+.target-label{font-family:var(--font-mono); font-size:11.5px; letter-spacing:.1em; color:var(--fg-faint); margin:0 0 4px; text-transform:uppercase;}
+.target{font-family:var(--font-mono); font-size:12.5px; line-height:1.55; background:var(--term-bg); color:var(--term-fg); border:1px solid var(--line); border-radius:3px; padding:10px 12px; margin:0 0 12px; overflow-x:auto; white-space:pre;}
+.target .hl{color:var(--term-ok); text-shadow:0 0 6px rgba(92,255,184,.6);}
+details.hint{border-top:1px dashed var(--line); padding-top:10px; font-size:14px;}
+details.hint summary{cursor:pointer; color:var(--accent); font-weight:500;}
+details.hint ol{margin:8px 0 0; padding-left:20px; color:var(--fg-soft);}
+details.hint li{margin-bottom:4px;}
+.card-actions{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px;}
+button{font-family:var(--font-ui); font-size:13.5px; border-radius:3px; border:1px solid var(--line); background:rgba(20,30,64,.6); color:var(--fg); padding:7px 14px; cursor:pointer; transition:border-color .15s, box-shadow .15s;}
+button:hover{border-color:var(--accent); box-shadow:0 0 10px rgba(54,230,255,.35);}
+button:focus-visible, summary:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+button.primary{background:linear-gradient(90deg, rgba(54,230,255,.25), rgba(255,61,168,.25)); border-color:var(--accent); color:#fff; box-shadow:0 0 14px rgba(54,230,255,.35);}
+.clear-banner{display:flex; align-items:center; gap:10px; background:var(--ok-soft); color:var(--ok); border:1px solid rgba(67,245,168,.4); border-radius:3px; padding:8px 12px; font-family:var(--font-mono); font-weight:700; letter-spacing:.08em; margin-bottom:12px; text-shadow:0 0 8px rgba(67,245,168,.6);}
+
+.mlist{list-style:none; margin:0; padding:0; display:flex; flex-direction:column;}
+.mlist li button{width:100%; text-align:left; border:1px solid transparent; background:transparent; display:grid; grid-template-columns:28px minmax(0,1fr) auto; gap:8px; align-items:center; padding:7px 8px; box-shadow:none;}
+.mlist li button:hover{background:var(--surface-2); border-color:transparent;}
+.mlist li button[aria-current="true"]{background:var(--accent-soft); border-color:rgba(54,230,255,.45); box-shadow:inset 3px 0 0 var(--accent);}
+.mlist .no{font-family:var(--font-mono); font-size:12px; color:var(--fg-faint); font-variant-numeric:tabular-nums;}
+.mlist .st{font-size:12px; color:var(--fg-faint); font-family:var(--font-mono);}
+.mlist .st.done{color:var(--ok); font-weight:700; text-shadow:0 0 8px rgba(67,245,168,.7);}
+.list-head{font-size:12px; letter-spacing:.14em; color:var(--fg-faint); text-transform:uppercase; font-family:var(--font-mono); margin:0 0 6px 8px;}
+
+/* ---- terminal ---- */
+.main{display:flex; flex-direction:column; gap:12px; min-width:0;}
+.modebar{display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px;}
+.mode-chip{font-family:var(--font-mono); font-weight:700; font-size:13px; letter-spacing:.12em; color:var(--term-bg); border-radius:2px; padding:4px 12px; background:var(--normal); box-shadow:0 0 14px var(--normal); transition:background .15s, box-shadow .15s;}
+.mode-chip.insert{background:var(--insert); box-shadow:0 0 14px var(--insert);} .mode-chip.command{background:var(--command); box-shadow:0 0 14px var(--command);} .mode-chip.shell{background:var(--fg-faint); box-shadow:none;}
+.mode-help{color:var(--fg-soft); font-size:13.5px; min-width:0;}
+.mode-help kbd{font-family:var(--font-mono); color:var(--accent);}
+.term{--mc:var(--normal); position:relative; background:var(--term-bg); border-radius:6px; padding:30px 0 0; cursor:text; overflow:hidden; border:1px solid var(--mc);
+  box-shadow:0 0 0 1px rgba(0,0,0,.6), 0 0 24px color-mix(in srgb, var(--mc) 45%, transparent), 0 20px 60px rgba(0,0,0,.6); transition:border-color .15s, box-shadow .15s;}
+.term.insert{--mc:var(--insert);} .term.command{--mc:var(--command);} .term.shell{--mc:var(--term-dim);}
+.term-bar{position:absolute; top:0; left:0; right:0; height:24px; display:flex; align-items:center; gap:6px; padding:0 12px; background:linear-gradient(180deg, rgba(255,255,255,.06), transparent); border-bottom:1px solid rgba(255,255,255,.06); font-family:var(--font-mono); font-size:11px; color:var(--term-dim); letter-spacing:.08em;}
+.term-bar i{width:9px; height:9px; border-radius:50%; background:var(--term-dim);}
+.term-bar i:nth-child(1){background:#FF5F7E;} .term-bar i:nth-child(2){background:#FFC24B;} .term-bar i:nth-child(3){background:#43F5A8;}
+.term-bar span{margin-left:8px;}
+.term::after{content:""; position:absolute; inset:0; pointer-events:none; background:repeating-linear-gradient(180deg, rgba(255,255,255,.035) 0 1px, transparent 1px 3px); mix-blend-mode:screen;}
+.term::before{content:""; position:absolute; inset:0; pointer-events:none; background:radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.45)); z-index:1;}
+.screen{position:relative; font-family:var(--font-mono); font-size:14px; line-height:1.6; color:var(--term-fg); padding:4px 14px 0; white-space:pre; overflow:hidden; min-height:calc(14 * 1.6em); text-shadow:0 0 4px rgba(120,220,255,.45);}
+.screen .row{height:1.6em;}
+.screen .tilde{color:var(--term-dim); text-shadow:none;}
+.screen .lnum{color:var(--term-dim); text-shadow:none;}
+.screen .cur{background:var(--term-cursor); color:var(--term-bg); box-shadow:0 0 10px var(--term-cursor); text-shadow:none;}
+.screen .bar{box-shadow:inset 2px 0 0 var(--insert), -2px 0 8px var(--insert);}
+.term:not(.focused) .screen .cur{background:transparent; color:var(--term-fg); box-shadow:inset 0 0 0 1px var(--term-cursor);}
+.status{position:relative; display:flex; justify-content:space-between; gap:12px; font-family:var(--font-mono); font-size:14px; line-height:1.6; color:var(--term-fg); background:var(--term-status); border-top:1px solid rgba(255,255,255,.06); padding:3px 14px; white-space:pre;}
+.status .left{overflow:hidden; text-overflow:ellipsis; min-width:0;}
+.status .right{color:var(--term-dim); flex-shrink:0; font-variant-numeric:tabular-nums;}
+.status .err{color:var(--term-err); text-shadow:0 0 6px rgba(255,122,149,.6);} .status .ok{color:var(--term-ok);} .status .warn{color:var(--term-warn);} .status .ins{color:var(--insert); font-weight:700; text-shadow:0 0 8px var(--insert);}
+.status .ccur{background:var(--term-cursor); color:var(--term-bg);}
+.shell-line{color:var(--term-fg);} .shell-line .p{color:var(--term-ok);}
+#kb{position:absolute; opacity:0; left:0; top:0; width:1px; height:1px; border:0; padding:0; resize:none;}
+.focus-hint{position:absolute; inset:auto 0 44px 0; display:flex; justify-content:center; pointer-events:none; z-index:2;}
+.focus-hint span{background:var(--accent-2); color:#fff; font-size:13px; font-weight:700; padding:4px 14px; border-radius:2px; box-shadow:0 0 16px var(--accent-2); animation:blink 1.4s steps(2) infinite;}
+.term.focused .focus-hint{display:none;}
+.flash{position:absolute; inset:0; z-index:3; display:flex; align-items:center; justify-content:center; pointer-events:none; opacity:0;}
+.flash b{font-family:var(--font-display); font-weight:400; font-size:clamp(1.8rem,6vw,3rem); color:#fff; letter-spacing:.08em; text-shadow:0 0 10px var(--ok), 0 0 30px var(--ok), 3px 0 0 rgba(255,61,168,.8), -3px 0 0 rgba(54,230,255,.8); background:rgba(4,6,14,.6); padding:8px 24px;}
+.flash.go{animation:flash 1.6s ease-out;}
+@keyframes flash{ 0%{opacity:0; transform:scale(1.15);} 12%{opacity:1; transform:scale(1);} 18%{opacity:.4;} 24%{opacity:1;} 80%{opacity:1;} 100%{opacity:0;} }
+
+.keys{display:flex; flex-wrap:wrap; gap:6px;}
+.keys button{font-family:var(--font-mono); font-size:13px; padding:6px 12px; border-bottom-width:2px;}
+.log{display:flex; flex-wrap:wrap; align-items:center; gap:4px; min-height:30px; font-size:12.5px; color:var(--fg-faint);}
+.log kbd{font-family:var(--font-mono); font-size:12px; background:rgba(20,30,64,.7); color:var(--normal); border:1px solid var(--line); border-bottom-width:2px; border-radius:3px; padding:0 6px;}
+.log kbd.k-insert{color:var(--insert);} .log kbd.k-command{color:var(--command);} .log kbd.k-shell{color:var(--fg-faint);}
+
+details.ref{background:var(--surface); border:1px solid var(--line); border-radius:4px; padding:12px 16px; backdrop-filter:blur(8px);}
+details.ref summary{cursor:pointer; font-weight:700;}
+.ref-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr)); gap:14px 20px; margin-top:12px;}
+.ref-grid h3{margin:0 0 4px; font-size:12px; letter-spacing:.12em; color:var(--accent); font-family:var(--font-mono); text-transform:uppercase;}
+.ref-grid dl{margin:0; display:grid; grid-template-columns:auto minmax(0,1fr); gap:2px 10px; font-size:13.5px;}
+.ref-grid dt{font-family:var(--font-mono); font-weight:700; white-space:nowrap; color:var(--fg);}
+.ref-grid dd{margin:0; color:var(--fg-soft);}
+.note{font-size:12.5px; color:var(--fg-faint); margin:0;}
+@media (prefers-reduced-motion: reduce){ *{animation:none!important; transition:none!important;} }
+</style>
+</head>
+<body>
+
+<div class="bg" aria-hidden="true"><canvas id="rain"></canvas><div class="dots"></div><div class="grid-floor"></div></div>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="sys"><span class="dot"></span>training system online</p>
+      <h1><span class="prompt">&gt;_</span> vi練習道場<span class="caret"></span></h1>
+      <p>ブラウザの中で動くviの練習機です。ミッションを順にクリアしながら、モードの切り替え、移動、編集、保存と終了を手で覚えましょう。何を打ってもあなたのサーバーには影響しません。</p>
+    </div>
+    <div class="progress-pill"><span id="progress">クリア <b>0</b> / 11</span><div class="meter"><i id="meter"></i></div></div>
+  </header>
+
+  <div class="grid">
+    <aside class="side">
+      <section class="card" id="mission" aria-live="polite"></section>
+      <nav class="card" aria-label="ミッション一覧">
+        <p class="list-head">ミッション</p>
+        <ul class="mlist" id="mlist"></ul>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <div class="modebar">
+        <span class="mode-chip" id="modeChip">NORMAL</span>
+        <span class="mode-help" id="modeHelp"></span>
+      </div>
+      <div class="term focused" id="term">
+        <div class="term-bar"><i></i><i></i><i></i><span id="termTitle">tanaka@ubuntu: ~</span></div>
+        <textarea id="kb" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="viへのキー入力"></textarea>
+        <div class="screen" id="screen"></div>
+        <div class="status" id="status"><span class="left"></span><span class="right"></span></div>
+        <div class="flash" id="flash"><b>MISSION CLEAR</b></div>
+        <div class="focus-hint"><span>ここをクリックしてキー入力</span></div>
+      </div>
+      <div class="keys" aria-label="補助キー">
+        <button type="button" data-key="Esc">Esc</button>
+        <button type="button" data-key="Enter">Enter</button>
+        <button type="button" data-key="Backspace">BS</button>
+        <button type="button" data-key="C-r">Ctrl+R</button>
+        <button type="button" data-key="Left">←</button>
+        <button type="button" data-key="Down">↓</button>
+        <button type="button" data-key="Up">↑</button>
+        <button type="button" data-key="Right">→</button>
+      </div>
+      <p class="note">日本語入力（IME）はオフにして操作してください。スマートフォンでは下のボタンで Esc などを入力できます。</p>
+      <div class="log" id="log"><span>押したキー：</span></div>
+
+      <details class="ref" open>
+        <summary>使えるコマンド早見表</summary>
+        <div class="ref-grid">
+          <div><h3>モード</h3><dl>
+            <dt>i a I A o O</dt><dd>挿入モードへ</dd>
+            <dt>Esc</dt><dd>ノーマルモードへ</dd>
+            <dt>: / ?</dt><dd>コマンドラインへ</dd></dl></div>
+          <div><h3>保存・終了</h3><dl>
+            <dt>:w</dt><dd>保存</dd>
+            <dt>:wq :x ZZ</dt><dd>保存して終了</dd>
+            <dt>:q / :q!</dt><dd>終了 / 破棄して終了</dd>
+            <dt>:e!</dt><dd>保存時点に戻す</dd></dl></div>
+          <div><h3>移動</h3><dl>
+            <dt>h j k l</dt><dd>← ↓ ↑ →</dd>
+            <dt>w b e</dt><dd>単語単位</dd>
+            <dt>0 ^ $</dt><dd>行頭 / 先頭文字 / 行末</dd>
+            <dt>gg G 5G</dt><dd>先頭 / 最終 / 5行目</dd></dl></div>
+          <div><h3>編集</h3><dl>
+            <dt>x r</dt><dd>1文字削除 / 1文字置換</dd>
+            <dt>dd yy p P</dt><dd>行削除・コピー・貼付</dd>
+            <dt>dw cw D J</dt><dd>単語削除・書換・行末まで削除・連結</dd>
+            <dt>u Ctrl+R .</dt><dd>取消・やり直し・繰り返し</dd></dl></div>
+          <div><h3>検索・置換・設定</h3><dl>
+            <dt>/abc n N</dt><dd>検索と次の候補</dd>
+            <dt>:%s/a/b/g</dt><dd>全体を置換</dd>
+            <dt>:set nu</dt><dd>行番号を表示</dd>
+            <dt>:12</dt><dd>12行目へ</dd></dl></div>
+        </div>
+        <p class="note" style="margin-top:12px">本物のVimの基本操作を再現した練習機です。ここにないコマンドは無視されるか、エラーになります。進み具合はこのブラウザにだけ保存されます。</p>
+      </details>
+    </main>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+const ROWS = 14;
+const $ = id => document.getElementById(id);
+const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+/* ================= missions ================= */
+const APP = ['# sample config','server_name = test01','port = 8080','log_level = debug','max_clients = 100','timeout = 30','# legacy settings','legacy_mode = on','legacy_path = /opt/legacy','legacy_user = nobody'];
+const eq = (a,b) => a.length===b.length && a.every((x,i)=>x===b[i]);
+const MISSIONS = [
+  { id:'quit', title:'viから抜け出す', file:'memo.txt', lines:['Hello vi','This is my first memo.'],
+    goal:'まずは「閉じ方」から。何も変更せずに、viを終了してください。',
+    hints:['起動直後はノーマルモードです。','<code>:q</code> と打って <code>Enter</code> を押します。'],
+    check:S => S.exited },
+  { id:'discard', title:'変更を捨てて終了する', file:'memo.txt', lines:['Hello vi','This is my first memo.'],
+    setup:['G','d','d'],
+    goal:'誰かが2行目を消してしまった状態です。この変更は<b>保存せずに</b>終了してください。',
+    hints:['<code>:q</code> だと E37 のエラーで閉じられません。','変更を捨てて閉じるのは <code>:q!</code> です。'],
+    check:S => S.exited && eq(S.saved, ['Hello vi','This is my first memo.']) },
+  { id:'insert', title:'文字を入力して保存する', file:'hello.txt', lines:[''], isNew:true,
+    goal:'空のファイルに <code>Hello vi</code> と1行だけ入力し、保存して終了してください。',
+    target:['Hello vi'],
+    hints:['<code>i</code> で挿入モードに入ります（画面下に -- INSERT --）。','打ち終わったら <code>Esc</code> でノーマルモードへ。','<code>:wq</code> で保存して終了します。'],
+    check:S => S.exited && eq(S.saved, ['Hello vi']) },
+  { id:'move', title:'移動して1文字消す', file:'app.conf', lines:['server_name = test01','port = 8080','log_level = deXbug','max_clients = 100','timeout = 30'],
+    goal:'3行目に紛れ込んだ <code>X</code> を消して保存してください（<code>:w</code> でも <code>:wq</code> でも可）。',
+    target:['server_name = test01','port = 8080','log_level = debug','max_clients = 100','timeout = 30'], hl:[2],
+    hints:['<code>j</code> で下の行へ、<code>l</code> や <code>w</code> で右へ移動します。','<code>2j</code> のように数字を付けると、その回数だけ動きます。','X の上で <code>x</code> を押すと1文字削除。'],
+    check:S => eq(S.saved, ['server_name = test01','port = 8080','log_level = debug','max_clients = 100','timeout = 30']) },
+  { id:'dd', title:'不要な行をまとめて削除', file:'app.conf', lines:APP,
+    goal:'8〜10行目の <code>legacy_</code> で始まる3行を削除して保存してください。',
+    target:APP.slice(0,7),
+    hints:['<code>:set nu</code> で行番号を出すと分かりやすくなります。','<code>8G</code> で8行目へ移動。','<code>3dd</code> で3行削除。間違えたら <code>u</code>。'],
+    check:S => eq(S.saved, APP.slice(0,7)) },
+  { id:'cw', title:'設定値を書き換える', file:'app.conf', lines:APP,
+    goal:'<code>port = 8080</code> を <code>port = 80</code> に書き換えて保存してください。',
+    target:APP.map(l=>l==='port = 8080'?'port = 80':l), hl:[2],
+    hints:['<code>/8080</code> と打って Enter で、8080 へ一気に飛べます。','<code>cw</code> で単語を消して挿入モードに入ります。','<code>80</code> と打って <code>Esc</code>、<code>:w</code>。'],
+    check:S => eq(S.saved, APP.map(l=>l==='port = 8080'?'port = 80':l)) },
+  { id:'o', title:'設定を1行追加する', file:'app.conf', lines:APP,
+    goal:'<code>timeout = 30</code> の<b>下</b>に、<code>keepalive = on</code> という行を追加して保存してください。',
+    target:[...APP.slice(0,6),'keepalive = on',...APP.slice(6)], hl:[6],
+    hints:['<code>6G</code> で timeout の行へ。','<code>o</code> で下に新しい行を作って挿入モードになります。','入力したら <code>Esc</code>、<code>:w</code>。'],
+    check:S => eq(S.saved, [...APP.slice(0,6),'keepalive = on',...APP.slice(6)]) },
+  { id:'yy', title:'行を複製して少し変える', file:'hosts.allow', lines:['# allowed clients','allow = 192.168.1.10','deny = all'],
+    goal:'2行目を複製して、複製した行の末尾を <code>10</code> から <code>11</code> に変えて保存してください。',
+    target:['# allowed clients','allow = 192.168.1.10','allow = 192.168.1.11','deny = all'], hl:[2],
+    hints:['2行目で <code>yy</code> → <code>p</code> で下に複製。','<code>$</code> で行末（最後の 0）へ。','<code>r1</code> でカーソル位置の1文字を 1 に置き換え。'],
+    check:S => eq(S.saved, ['# allowed clients','allow = 192.168.1.10','allow = 192.168.1.11','deny = all']) },
+  { id:'sub', title:'まとめて置換する', file:'links.txt', lines:['top: http://example.com/','docs: http://example.com/docs','api: http://api.example.com/ (old: http://old.example.com/)','contact: mailto:info@example.com'],
+    goal:'ファイル中の <code>http://</code> をすべて <code>https://</code> に置換して保存してください。3行目には2か所あります。',
+    target:['top: https://example.com/','docs: https://example.com/docs','api: https://api.example.com/ (old: https://old.example.com/)','contact: mailto:info@example.com'], hl:[0,1,2],
+    hints:['置換は <code>:%s/前/後/g</code>。','区切りの <code>/</code> と URL の <code>/</code> がぶつかるので、<code>http:</code> → <code>https:</code> と置換するのが簡単です。','末尾の <code>g</code> を忘れると、各行の最初の1つしか変わりません。'],
+    check:S => eq(S.saved, ['top: https://example.com/','docs: https://example.com/docs','api: https://api.example.com/ (old: https://old.example.com/)','contact: mailto:info@example.com']) },
+  { id:'undo', title:'消えた行を取り戻す', file:'app.conf', lines:APP,
+    setup:[':','s','e','t',' ','n','u','Enter','3','G','2','d','d'],
+    goal:'うっかり3〜4行目を消してしまいました。<code>u</code> で元に戻してから、保存して終了してください（<code>:q!</code> は不可）。',
+    target:APP, hl:[2,3],
+    hints:['ノーマルモードで <code>u</code> を押すと直前の変更を取り消します。','戻りすぎたら <code>Ctrl+R</code> でやり直し。','最後は <code>:wq</code>。'],
+    check:S => S.exited && S.exitBy==='write' && eq(S.saved, APP) },
+  { id:'final', title:'総合問題：設定変更', file:'app.conf', lines:APP,
+    goal:'次の4つをすべて行い、保存して終了してください。<br>① port を 80 に ② log_level を info に ③ timeout の下に <code>keepalive = on</code> を追加 ④ legacy_ の3行を削除',
+    target:['# sample config','server_name = test01','port = 80','log_level = info','max_clients = 100','timeout = 30','keepalive = on','# legacy settings'], hl:[2,3,6],
+    hints:['順番は自由。行番号が変わる操作（追加・削除）は後回しにすると楽です。','<code>:%s/debug/info/</code> や <code>cw</code> を活用。','間違えたら <code>u</code>、全部やり直すなら <code>:e!</code>。'],
+    check:S => S.exited && eq(S.saved, ['# sample config','server_name = test01','port = 80','log_level = info','max_clients = 100','timeout = 30','keepalive = on','# legacy settings']) },
+  { id:'free', title:'自由練習', file:'app.conf', lines:APP, free:true,
+    goal:'課題はありません。早見表のコマンドを自由に試してください。<code>:q!</code> で終了しても、<code>Enter</code> でもう一度開けます。',
+    hints:['<code>dw</code> や <code>d$</code> のように「動詞＋移動」を組み合わせてみましょう。','<code>.</code> で直前の変更を繰り返せます。'],
+    check:() => false },
+];
+
+/* ================= progress ================= */
+let done = {};
+try { done = JSON.parse(localStorage.getItem('viDojoDone')||'{}') || {}; } catch(e) { done = {}; }
+function saveDone(){ try { localStorage.setItem('viDojoDone', JSON.stringify(done)); } catch(e) {} }
+let mi = 0;
+try { const v = parseInt(localStorage.getItem('viDojoCur')||'0',10); if (v>=0 && v<MISSIONS.length) mi = v; } catch(e) {}
+
+/* ================= editor state ================= */
+let S;
+function bytes(lines){ return new Blob([lines.join('\n')+'\n']).size; }
+function fresh(m){
+  const lines = [...m.lines];
+  return { file:m.file, lines, saved:[...lines], r:0, c:0, want:0, mode:'normal', cmd:'', cmdType:':',
+    count:'', op:null, opCount:'', g:false, z:false, rp:false, msg: m.isNew ? `"${m.file}" [New]` : `"${m.file}" ${lines.length}L, ${bytes(lines)}B`, msgType:'',
+    undo:[], redo:[], seq:0, reg:{lines:[''], linewise:false}, search:'', sdir:1, nu:false, top:0,
+    exited:false, exitBy:'', rec:null, last:null, didChange:false, insSnap:null, replay:false, cleared:false };
+}
+function load(i){
+  mi = i; try { localStorage.setItem('viDojoCur', String(i)); } catch(e) {}
+  const m = MISSIONS[i];
+  S = fresh(m);
+  if (m.setup){ for (const k of m.setup) dispatch(k); S.msg = m.id==='discard' ? '' : S.msg; if (m.id==='undo') S.msg = ''; S.msgType=''; S.last=null; }
+  keylog.length = 0;
+  renderMission(); render();
+}
+function snap(){ S.undo.push({lines:[...S.lines], r:S.r, c:S.c}); S.redo=[]; S.seq++; S.didChange=true; }
+const modified = () => !eq(S.lines, S.saved);
+const L = () => S.lines;
+const len = r => S.lines[r].length;
+function clamp(){
+  S.r = Math.max(0, Math.min(S.r, S.lines.length-1));
+  const max = S.mode==='insert' ? len(S.r) : Math.max(0, len(S.r)-1);
+  S.c = Math.max(0, Math.min(S.c, max));
+}
+function firstNB(r){ const m = S.lines[r].match(/^\s*/)[0].length; return Math.min(m, Math.max(0,len(r)-1)); }
+function setMsg(t, type){ S.msg = t; S.msgType = type||''; }
+
+/* ---------- word motions ---------- */
+function cls(ch){ if (ch===undefined || ch==='\n') return 0; if (/\s/.test(ch)) return 0; if (/\w/.test(ch)) return 1; if (ch.charCodeAt(0)>127) return 3; return 2; }
+function chAt(p){ const l=S.lines[p.r]; return p.c<l.length ? l[p.c] : '\n'; }
+function nextPos(p){ if (p.c < len(p.r)) return {r:p.r, c:p.c+1}; if (p.r < S.lines.length-1) return {r:p.r+1, c:0}; return null; }
+function prevPos(p){ if (p.c > 0) return {r:p.r, c:p.c-1}; if (p.r > 0) return {r:p.r-1, c:len(p.r-1)}; return null; }
+function wordFwd(p){
+  let k = cls(chAt(p)); let q = p;
+  if (k>0){ while (q && q.r===p.r && cls(chAt(q))===k) { const n=nextPos(q); if(!n) return {r:q.r, c:Math.max(0,len(q.r)-1), end:true}; q=n; } }
+  while (q){ if (len(q.r)===0 && q.r!==p.r) return q; if (cls(chAt(q))!==0) return q; const n=nextPos(q); if(!n) return {r:q.r, c:Math.max(0,len(q.r)-1), end:true}; q=n; }
+  return p;
+}
+function wordBack(p){
+  let q = prevPos(p); if (!q) return {r:0,c:0};
+  while (q && cls(chAt(q))===0 && !(len(q.r)===0)) { const n=prevPos(q); if(!n) return {r:0,c:0}; q=n; }
+  if (len(q.r)===0) return {r:q.r, c:0};
+  const k = cls(chAt(q));
+  while (true){ const n = prevPos(q); if (!n || n.r!==q.r || cls(chAt(n))!==k) break; q=n; }
+  return q;
+}
+function wordEnd(p){
+  let q = nextPos(p); if (!q) return p;
+  while (q && cls(chAt(q))===0) { const n=nextPos(q); if(!n) return p; q=n; }
+  const k = cls(chAt(q));
+  while (true){ const n = nextPos(q); if (!n || n.r!==q.r || cls(chAt(n))!==k) break; q=n; }
+  return q;
+}
+
+/* ---------- motion: returns {r,c,lw,inc} or 'pending' or null ---------- */
+function motion(k, n, hasCount){
+  const p = {r:S.r, c:S.c};
+  switch(k){
+    case 'h': case 'Left': case 'Backspace': return {r:p.r, c:Math.max(0,p.c-n)};
+    case 'l': case 'Right': case ' ': return {r:p.r, c:Math.min(p.c+n, S.op? len(p.r) : Math.max(0,len(p.r)-1))};
+    case 'j': case 'Down': case 'C-n': return {r:Math.min(S.lines.length-1,p.r+n), c:S.want, lw:true, vert:true};
+    case 'k': case 'Up': case 'C-p': return {r:Math.max(0,p.r-n), c:S.want, lw:true, vert:true};
+    case 'Enter': case '+': { const r=Math.min(S.lines.length-1,p.r+n); return {r, c:firstNB(r), lw:true}; }
+    case '-': { const r=Math.max(0,p.r-n); return {r, c:firstNB(r), lw:true}; }
+    case '0': case 'Home': return {r:p.r, c:0};
+    case '^': return {r:p.r, c:firstNB(p.r)};
+    case '$': case 'End': { const r=Math.min(S.lines.length-1,p.r+n-1); return {r, c:Math.max(0,len(r)-1), inc:true, eol:true}; }
+    case 'w': { let q=p; for(let i=0;i<n;i++){ const nq=wordFwd(q); if (S.op && nq.r>q.r && !nq.end) { q={r:q.r, c:len(q.r)}; break; } if (nq.end && S.op) { q={r:nq.r,c:len(nq.r)}; break; } q=nq; } return {r:q.r,c:q.c}; }
+    case 'b': { let q=p; for(let i=0;i<n;i++) q=wordBack(q); return q; }
+    case 'e': { let q=p; for(let i=0;i<n;i++) q=wordEnd(q); return {r:q.r,c:q.c,inc:true}; }
+    case 'G': { const r = hasCount ? Math.min(n,S.lines.length)-1 : S.lines.length-1; return {r, c:firstNB(r), lw:true}; }
+    case 'g': S.g = true; return 'pending';
+    case 'C-f': { const r=Math.min(S.lines.length-1, p.r+(ROWS-2)*n); return {r, c:firstNB(r), lw:true}; }
+    case 'C-b': { const r=Math.max(0, p.r-(ROWS-2)*n); return {r, c:firstNB(r), lw:true}; }
+    case 'C-d': { const r=Math.min(S.lines.length-1, p.r+ROWS/2); return {r, c:firstNB(r), lw:true}; }
+    case 'C-u': { const r=Math.max(0, p.r-ROWS/2); return {r, c:firstNB(r), lw:true}; }
+    case 'n': return searchMove(S.sdir, n);
+    case 'N': return searchMove(-S.sdir, n);
+  }
+  return null;
+}
+
+/* ---------- search ---------- */
+function mkRe(pat, flags){ try { return new RegExp(pat, flags); } catch(e) { return new RegExp(pat.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), flags); } }
+function searchMove(dir, n){
+  if (!S.search){ setMsg('E35: No previous regular expression','err'); return null; }
+  let pos = {r:S.r, c:S.c}; let wrapped = false;
+  for (let i=0;i<n;i++){
+    const res = findFrom(pos, dir); if (!res) { setMsg('E486: Pattern not found: '+S.search,'err'); return null; }
+    pos = res; if (res.wrapped) wrapped = true;
+  }
+  setMsg(wrapped ? (dir>0 ? 'search hit BOTTOM, continuing at TOP' : 'search hit TOP, continuing at BOTTOM') : (dir>0?'/':'?')+S.search, wrapped?'warn':'');
+  return {r:pos.r, c:pos.c};
+}
+function findFrom(p, dir){
+  const re = mkRe(S.search, 'g'); const N = S.lines.length;
+  const all = [];
+  for (let r=0;r<N;r++){ re.lastIndex=0; let m; const l=S.lines[r]; while((m=re.exec(l))!==null){ all.push({r,c:m.index}); if (m[0].length===0) re.lastIndex++; } }
+  if (!all.length) return null;
+  if (dir>0){ const f = all.find(q => q.r>p.r || (q.r===p.r && q.c>p.c)); return f || {...all[0], wrapped:true}; }
+  const rev = [...all].reverse(); const f = rev.find(q => q.r<p.r || (q.r===p.r && q.c<p.c)); return f || {...rev[0], wrapped:true};
+}
+
+/* ---------- text ops ---------- */
+function getRange(a, b){ // b exclusive, charwise
+  if (a.r===b.r) return [S.lines[a.r].slice(a.c, b.c)];
+  const out=[S.lines[a.r].slice(a.c)]; for (let r=a.r+1;r<b.r;r++) out.push(S.lines[r]); out.push(S.lines[b.r].slice(0,b.c)); return out;
+}
+function delRange(a, b){
+  const head = S.lines[a.r].slice(0,a.c), tail = S.lines[b.r].slice(b.c);
+  S.lines.splice(a.r, b.r-a.r+1, head+tail);
+}
+function report(n, word){ if (n>2) setMsg(`${n} ${word}`); }
+function applyOp(op, t, n){
+  let a = {r:S.r, c:S.c}, b = {r:t.r, c:t.c};
+  if (t.lw){
+    const r1=Math.min(a.r,b.r), r2=Math.max(a.r,b.r), cnt=r2-r1+1;
+    S.reg = {lines:S.lines.slice(r1,r2+1), linewise:true};
+    if (op==='y'){ S.r=r1; report(cnt,'lines yanked'); return; }
+    snap();
+    if (op==='d'){ S.lines.splice(r1,cnt); if(!S.lines.length) S.lines=['']; S.r=Math.min(r1,S.lines.length-1); S.c=firstNB(S.r); report(cnt,'fewer lines'); }
+    else if (op==='c'){ const ind=S.lines[r1].match(/^\s*/)[0]; S.lines.splice(r1,cnt,ind); S.r=r1; S.c=ind.length; enterInsert(true); }
+    return;
+  }
+  if (b.r<a.r || (b.r===a.r && b.c<a.c)) { const x=a; a=b; b=x; }
+  if (t.inc) b = {r:b.r, c:Math.min(b.c+1, len(b.r))};
+  if (a.r===b.r && a.c===b.c && op!=='c') return;
+  S.reg = {lines:getRange(a,b), linewise:false};
+  if (op==='y'){ S.r=a.r; S.c=a.c; return; }
+  snap(); delRange(a,b); S.r=a.r; S.c=a.c;
+  if (op==='c') enterInsert(true);
+}
+function put(before, n){
+  const R = S.reg; snap();
+  if (R.linewise){
+    const ins=[]; for(let i=0;i<n;i++) ins.push(...R.lines);
+    const at = before ? S.r : S.r+1; S.lines.splice(at,0,...ins); S.r=at; S.c=firstNB(at); report(ins.length,'more lines');
+  } else {
+    let txt=R.lines; if (n>1){ const one=txt.join('\n'); txt=Array(n).fill(one).join('').split('\n'); }
+    const col = before ? S.c : Math.min(S.c+1, len(S.r));
+    const line=S.lines[S.r], head=line.slice(0,col), tail=line.slice(col);
+    if (txt.length===1){ S.lines[S.r]=head+txt[0]+tail; S.c=col+txt[0].length-1; }
+    else { const mid=txt.slice(1,-1); S.lines.splice(S.r,1, head+txt[0], ...mid, txt[txt.length-1]+tail); S.c=col; }
+  }
+}
+function enterInsert(noSnap){ if(!noSnap) snap(); S.insSnap = S.undo.length; S.mode='insert'; setMsg(''); }
+
+/* ---------- ex commands ---------- */
+function write(){ S.saved=[...S.lines]; setMsg(`"${S.file}" ${S.lines.length}L, ${bytes(S.lines)}B written`); }
+function exitVi(by){ S.exited=true; S.exitBy=by; S.mode='normal'; }
+function ex(cmd){
+  const c = cmd.trim();
+  if (c==='') return;
+  if (/^\d+$/.test(c)){ S.r=Math.min(parseInt(c,10),S.lines.length)-1; if(S.r<0)S.r=0; S.c=firstNB(S.r); return; }
+  if (c==='$'){ S.r=S.lines.length-1; S.c=firstNB(S.r); return; }
+  if (c==='w' || c==='w!'){ write(); return; }
+  if (c==='wq' || c==='x' || c==='wq!' || c==='x!'){ const was = modified() || c.startsWith('wq'); if (was) write(); exitVi('write'); return; }
+  if (c==='q'){ if (modified()){ setMsg('E37: No write since last change (add ! to override)','err'); return; } exitVi('quit'); return; }
+  if (c==='q!' || c==='qa!'){ exitVi('discard'); return; }
+  if (c==='e!'){ snap(); S.lines=[...S.saved]; clamp(); setMsg(`"${S.file}" ${S.lines.length}L, ${bytes(S.lines)}B`); return; }
+  let m;
+  if ((m = c.match(/^set?\s+(\w+)$/))){
+    const o=m[1];
+    if (o==='nu'||o==='number'){ S.nu=true; return; }
+    if (o==='nonu'||o==='nonumber'){ S.nu=false; return; }
+    setMsg('E518: Unknown option: '+o,'err'); return;
+  }
+  if ((m = c.match(/^(%|\d+,\d+|\d+|\.,\$|1,\$)?s(.)(.*)$/))){
+    const range=m[1]||'', d=m[2], rest=m[3];
+    const parts = splitDelim(rest, d);
+    if (parts.length<2){ setMsg('E486: Pattern not found: '+(parts[0]||''),'err'); return; }
+    const [pat, rep, flags=''] = parts;
+    let r1=S.r, r2=S.r;
+    if (range==='%'||range==='1,$'){ r1=0; r2=S.lines.length-1; }
+    else if (range==='.,$'){ r2=S.lines.length-1; }
+    else if (/^\d+,\d+$/.test(range)){ const [x,y]=range.split(',').map(Number); r1=x-1; r2=Math.min(y,S.lines.length)-1; }
+    else if (/^\d+$/.test(range)){ r1=r2=Number(range)-1; }
+    const usePat = pat || S.search; if (!usePat){ setMsg('E35: No previous regular expression','err'); return; }
+    const re = mkRe(usePat, flags.includes('g')?'g':'');
+    let subs=0, lines=0, lastR=-1; const next=[...S.lines];
+    for (let r=Math.max(0,r1); r<=r2 && r<next.length; r++){
+      let cnt=0; const nl = next[r].replace(re, (...a)=>{ cnt++; return rep.replace(/\\\//g,'/').replace(/&/g,a[0]); });
+      if (cnt){ next[r]=nl; subs+=cnt; lines++; lastR=r; }
+    }
+    if (!subs){ setMsg('E486: Pattern not found: '+usePat,'err'); return; }
+    snap(); S.lines=next; S.r=lastR; S.c=firstNB(lastR); S.search=usePat;
+    if (lines>2 || subs>2) setMsg(`${subs} substitution${subs>1?'s':''} on ${lines} line${lines>1?'s':''}`+(flags.includes('c')?'（練習機では確認なしで置換）':''), 'ok');
+    else if (flags.includes('c')) setMsg('（練習機では確認なしで置換しました）','ok');
+    return;
+  }
+  if (/^h(elp)?\b/.test(c)){ setMsg('練習機では :help は使えません。本物のVimで :help を試してください','warn'); return; }
+  setMsg('E492: Not an editor command: '+c,'err');
+}
+function splitDelim(s, d){ const out=['']; for (let i=0;i<s.length;i++){ if (s[i]==='\\' && s[i+1]===d){ out[out.length-1]+=d; i++; continue; } if (s[i]===d){ out.push(''); continue; } out[out.length-1]+=s[i]; } return out; }
+
+/* ---------- key handlers ---------- */
+function normalKey(k){
+  if (S.rp){ S.rp=false; if (k.length===1 && len(S.r)>0){ const n=Math.max(1,parseInt(S.count||'1',10)); S.count=''; if (S.c+n<=len(S.r)){ snap(); const l=S.lines[S.r]; S.lines[S.r]=l.slice(0,S.c)+k.repeat(n)+l.slice(S.c+n); S.c+=n-1; } } else S.count=''; return; }
+  if (S.z){ S.z=false; if (k==='Z'){ ex('x'); } else if (k==='Q'){ ex('q!'); } S.count=''; return; }
+  if (/^[1-9]$/.test(k) || (k==='0' && (S.count!=='' ))){ S.count+=k; return; }
+  const hasCount = S.count!=='' || S.opCount!=='';
+  const n = Math.max(1,parseInt(S.count||'1',10)) * Math.max(1,parseInt(S.opCount||'1',10));
+  if (k==='Esc'){ S.count=''; S.op=null; S.opCount=''; S.g=false; return; }
+
+  if (S.g){
+    S.g=false;
+    if (k==='g'){ const r = hasCount ? Math.min(n,S.lines.length)-1 : 0; finishMotion({r, c:firstNB(r), lw:true}, n); return; }
+    S.count=''; S.op=null; S.opCount=''; return;
+  }
+  if (S.op){
+    const op=S.op;
+    if (k===op){ const r2=Math.min(S.lines.length-1, S.r+n-1); finishMotion({r:r2, c:0, lw:true}, n); return; }
+    let t;
+    if (op==='c' && k==='w' && cls(chAt({r:S.r,c:S.c}))!==0){ // cw behaves like ce
+      let q={r:S.r,c:S.c}; for(let i=0;i<n;i++){ const nx=nextPos(q); if (i===0 && (!nx || nx.r!==q.r || cls(chAt(nx))!==cls(chAt(q)))) { continue; } q=wordEnd(q); }
+      t={r:q.r,c:q.c,inc:true};
+    } else t = motion(k, n, hasCount);
+    if (t==='pending') return;
+    if (!t){ S.op=null; S.count=''; S.opCount=''; return; }
+    finishMotion(t, n); return;
+  }
+
+  // simple commands
+  switch(k){
+    case 'i': S.count=''; enterInsert(); return;
+    case 'a': S.count=''; if (len(S.r)>0) S.c++; enterInsert(); return;
+    case 'I': S.count=''; S.c=firstNB(S.r); if (len(S.r)===0) S.c=0; enterInsert(); return;
+    case 'A': S.count=''; enterInsert(); S.c=len(S.r); return;
+    case 'o': case 'O': { S.count=''; snap(); const ind=S.lines[S.r].match(/^\s*/)[0]; const at = k==='o'? S.r+1 : S.r; S.lines.splice(at,0,''); S.r=at; S.c=0; void ind; enterInsert(true); return; }
+    case 'x': case 'Delete': { S.count=''; if (len(S.r)===0) return; const e=Math.min(len(S.r), S.c+n); S.reg={lines:[S.lines[S.r].slice(S.c,e)], linewise:false}; snap(); const l=S.lines[S.r]; S.lines[S.r]=l.slice(0,S.c)+l.slice(e); return; }
+    case 'X': { S.count=''; if (S.c===0) return; const s=Math.max(0,S.c-n); S.reg={lines:[S.lines[S.r].slice(s,S.c)], linewise:false}; snap(); const l=S.lines[S.r]; S.lines[S.r]=l.slice(0,s)+l.slice(S.c); S.c=s; return; }
+    case 'D': S.count=''; S.op='d'; finishMotion({r:S.r, c:Math.max(0,len(S.r)-1), inc:true}, 1); return;
+    case 'C': S.count=''; S.op='c'; finishMotion({r:S.r, c:len(S.r)}, 1); if (S.mode!=='insert'){ snap(); enterInsert(true);} return;
+    case 'J': { S.count=''; const cnt=Math.max(2,n); if (S.r>=S.lines.length-1) return; snap(); for (let i=1;i<cnt && S.r<S.lines.length-1;i++){ const a=S.lines[S.r].replace(/\s+$/,''), b=S.lines[S.r+1].replace(/^\s+/,''); S.c=a.length; S.lines.splice(S.r,2, b ? (a? a+' '+b : b) : a); } return; }
+    case 'r': S.rp=true; return;
+    case 'p': case 'P': S.count=''; put(k==='P', n); return;
+    case 'u': { S.count=''; for (let i=0;i<n;i++){ if (!S.undo.length){ setMsg('Already at oldest change'); break; } const before=S.lines.length; S.redo.push({lines:[...S.lines], r:S.r, c:S.c}); const st=S.undo.pop(); S.lines=st.lines; S.r=st.r; S.c=st.c; S.seq--; diffMsg(before, 'before'); } return; }
+    case 'C-r': { S.count=''; for (let i=0;i<n;i++){ if (!S.redo.length){ setMsg('Already at newest change'); break; } const before=S.lines.length; S.undo.push({lines:[...S.lines], r:S.r, c:S.c}); const st=S.redo.pop(); S.lines=st.lines; S.r=st.r; S.c=st.c; S.seq++; diffMsg(before, 'after'); } return; }
+    case '.': { S.count=''; if (!S.last) return; const seq=S.last; S.replay=true; for (const key of seq) dispatch(key); S.replay=false; return; }
+    case ':': case '/': case '?': S.mode='command'; S.cmdType=k; S.cmd = ''; S.count=''; setMsg(''); return;
+    case 'Z': S.z=true; return;
+    case 'd': case 'y': case 'c': S.op=k; S.opCount=S.count; S.count=''; return;
+    case 'C-g': setMsg(`"${S.file}"${modified()?' [Modified]':''} ${S.lines.length} lines --${Math.round((S.r+1)/S.lines.length*100)}%--`); S.count=''; return;
+  }
+  const t = motion(k, n, hasCount);
+  if (t==='pending') return;
+  if (t) finishMotion(t, n); else S.count='';
+}
+function diffMsg(before, word){
+  const d = S.lines.length - before;
+  const base = d>0 ? `${d} more line${d>1?'s':''}` : d<0 ? `${-d} fewer line${d<-1?'s':''}` : '1 change';
+  setMsg(`${base}; ${word} #${word==='before'?S.seq+1:S.seq}`);
+}
+function finishMotion(t, n){
+  if (S.op){ const op=S.op; S.op=null; S.count=''; S.opCount=''; applyOp(op, t, n); return; }
+  S.count='';
+  S.r = t.r;
+  if (t.vert){ S.c = t.c; } else { S.c = t.c; S.want = t.eol ? Infinity : t.c; }
+}
+function insertKey(k){
+  const l = S.lines[S.r];
+  switch(k){
+    case 'Esc': {
+      S.mode='normal'; if (S.c>0) S.c--;
+      const prev = S.undo[S.insSnap-1];
+      if (prev && S.undo.length===S.insSnap && eq(prev.lines, S.lines)) { S.undo.pop(); S.seq--; S.didChange = false; }
+      setMsg(''); return;
+    }
+    case 'Enter': { const ind=''; S.lines.splice(S.r,1, l.slice(0,S.c), ind+l.slice(S.c)); S.r++; S.c=ind.length; return; }
+    case 'Backspace': if (S.c>0){ S.lines[S.r]=l.slice(0,S.c-1)+l.slice(S.c); S.c--; } else if (S.r>0){ const p=S.lines[S.r-1]; S.lines.splice(S.r-1,2,p+l); S.r--; S.c=p.length; } return;
+    case 'Delete': if (S.c<l.length) S.lines[S.r]=l.slice(0,S.c)+l.slice(S.c+1); return;
+    case 'Left': if (S.c>0) S.c--; return;
+    case 'Right': if (S.c<l.length) S.c++; return;
+    case 'Up': if (S.r>0){ S.r--; S.c=Math.min(S.c,len(S.r)); } return;
+    case 'Down': if (S.r<S.lines.length-1){ S.r++; S.c=Math.min(S.c,len(S.r)); } return;
+    case 'Home': S.c=0; return; case 'End': S.c=l.length; return;
+    case 'Tab': S.lines[S.r]=l.slice(0,S.c)+'    '+l.slice(S.c); S.c+=4; return;
+  }
+  if (k.length===1){ S.lines[S.r]=l.slice(0,S.c)+k+l.slice(S.c); S.c++; }
+}
+function commandKey(k){
+  if (k==='Esc'){ S.mode='normal'; S.cmd=''; return; }
+  if (k==='Backspace'){ if (!S.cmd){ S.mode='normal'; return; } S.cmd=S.cmd.slice(0,-1); return; }
+  if (k==='Enter'){
+    const t=S.cmdType, c=S.cmd; S.mode='normal'; S.cmd='';
+    if (t===':'){ ex(c.replace(/^\.,\.\+0/,'')); }
+    else { if (c) S.search=c; S.sdir = t==='/'?1:-1; const m=searchMove(S.sdir,1); if (m){ S.r=m.r; S.c=m.c; S.want=m.c; } }
+    return;
+  }
+  if (k.length===1) S.cmd+=k;
+}
+function dispatch(k){
+  if (S.exited){ return; }
+  if (S.mode==='insert') insertKey(k);
+  else if (S.mode==='command') commandKey(k);
+  else normalKey(k);
+  if (!S.exited) clamp();
+}
+
+/* ---------- top-level key entry with change recording (for .) ---------- */
+const keylog = [];
+function pending(){ return S.count!=='' || S.op || S.g || S.z || S.rp; }
+function handle(k){
+  keylog.push({k, mode:S.exited?'shell':S.mode}); if (keylog.length>24) keylog.shift();
+  if (S.exited){ if (k==='Enter') reopen(); render(); return; }
+  if (S.mode==='normal' && !pending() && k!=='.'){ S.rec=[]; S.didChange=false; }
+  if (S.rec && S.mode!=='command') S.rec.push(k);
+  if (S.mode==='normal' && !pending() && k!=='Esc' && !(k===':'||k==='/'||k==='?')) { if (S.msgType!=='err' || true) { S.msg=''; S.msgType=''; } }
+  dispatch(k);
+  if (S.mode==='command') S.rec=null;
+  if (S.mode==='normal' && !pending() && S.rec){ if (S.didChange && k!=='.') S.last=S.rec; S.rec=null; }
+  render(); check();
+}
+function reopen(){ const m=MISSIONS[mi]; const saved=[...S.saved]; const nu=S.nu; S = fresh({...m, lines:saved, isNew:false}); S.nu=nu; render(); }
+
+/* ================= rendering ================= */
+const screenEl=$('screen'), statusEl=$('status'), termEl=$('term');
+function render(){
+  const term = termEl;
+  $('termTitle').textContent = S.exited ? 'tanaka@ubuntu: ~' : 'vi '+S.file+(modified()?' [+]':'');
+  term.classList.remove('insert','command','shell');
+  const chip=$('modeChip'), help=$('modeHelp');
+  chip.className='mode-chip';
+  if (S.exited){
+    term.classList.add('shell'); chip.classList.add('shell'); chip.textContent='SHELL';
+    help.innerHTML='viを終了しました。端末をクリックして <kbd>Enter</kbd> を押すと、保存された内容で同じファイルをもう一度開けます。';
+    const how = S.exitBy==='discard' ? '（変更は破棄されました）' : S.exitBy==='write' ? '（保存して終了しました）' : '';
+    const cat = S.saved.map(l=>esc(l)).join('\n');
+    screenEl.innerHTML = `<div class="shell-line"><span class="p">tanaka@ubuntu:~$</span> vi ${esc(S.file)}</div><div class="shell-line" style="color:var(--term-dim)">${how}</div><div class="shell-line"><span class="p">tanaka@ubuntu:~$</span> cat ${esc(S.file)}</div><div>${cat||'&nbsp;'}</div><div class="shell-line"><span class="p">tanaka@ubuntu:~$</span> <span class="cur"> </span></div>`;
+    statusEl.style.visibility='hidden';
+    renderLog(); return;
+  }
+  statusEl.style.visibility='visible';
+  if (S.mode==='insert'){ term.classList.add('insert'); chip.classList.add('insert'); chip.textContent='INSERT'; help.innerHTML='挿入モード：打った文字がそのまま入力されます。終わったら <kbd>Esc</kbd>。'; }
+  else if (S.mode==='command'){ term.classList.add('command'); chip.classList.add('command'); chip.textContent='COMMAND'; help.innerHTML='コマンドラインモード：画面最下行に入力して <kbd>Enter</kbd>。やめるなら <kbd>Esc</kbd>。'; }
+  else { chip.textContent='NORMAL'; help.innerHTML='ノーマルモード：キーは命令になります。文字を打つなら <kbd>i</kbd>、保存や終了は <kbd>:</kbd>。'; }
+
+  // viewport
+  if (S.r < S.top) S.top = S.r;
+  if (S.r >= S.top+ROWS) S.top = S.r-ROWS+1;
+  const w = String(S.lines.length).length;
+  let html='';
+  for (let i=0;i<ROWS;i++){
+    const r=S.top+i;
+    if (r>=S.lines.length){ html+='<div class="row tilde">~</div>'; continue; }
+    const line=S.lines[r];
+    let pre = S.nu ? `<span class="lnum">${String(r+1).padStart(Math.max(3,w),' ')} </span>` : '';
+    let body='';
+    if (r===S.r && S.mode!=='command'){
+      const c=S.c;
+      const ch = c<line.length ? line[c] : ' ';
+      const cl = S.mode==='insert' ? 'bar' : 'cur';
+      body = esc(line.slice(0,c)) + `<span class="${cl}">${esc(ch)}</span>` + esc(line.slice(c+1));
+    } else body = esc(line) || '';
+    html+=`<div class="row">${pre}${body}</div>`;
+  }
+  screenEl.innerHTML=html;
+
+  // status line
+  let left='';
+  if (S.mode==='command') left = esc(S.cmdType+S.cmd)+'<span class="ccur"> </span>';
+  else if (S.msg) left = `<span class="${S.msgType}">${esc(S.msg)}</span>`;
+  else if (S.mode==='insert') left = '<span class="ins">-- INSERT --</span>';
+  const pend = (S.opCount||'')+(S.op||'')+(S.count||'')+(S.g?'g':'')+(S.z?'Z':'')+(S.rp?'r':'');
+  const col = len(S.r)===0 ? '0-1' : String(S.c+1);
+  const pos = S.lines.length<=ROWS ? 'All' : S.top===0 ? 'Top' : S.top+ROWS>=S.lines.length ? 'Bot' : Math.round(S.top/(S.lines.length-ROWS)*100)+'%';
+  statusEl.querySelector('.left').innerHTML = left || ' ';
+  statusEl.querySelector('.right').textContent = `${pend.padEnd(6,' ')}  ${(S.r+1)+','+col}`.padEnd(18,' ')+pos;
+  renderLog();
+}
+function label(k){ const map={'Esc':'Esc','Enter':'Enter','Backspace':'BS','Left':'←','Right':'→','Up':'↑','Down':'↓',' ':'␣','Tab':'Tab','Delete':'Del','Home':'Home','End':'End'}; if (map[k]) return map[k]; if (k.startsWith('C-')) return 'Ctrl+'+k.slice(2).toUpperCase(); return k; }
+function renderLog(){
+  const el=$('log');
+  el.innerHTML = '<span>押したキー：</span>' + (keylog.length ? keylog.map(e=>`<kbd class="k-${e.mode}">${esc(label(e.k))}</kbd>`).join('') : '<span>（まだありません）</span>');
+}
+
+/* ================= mission UI ================= */
+function targetHtml(m){
+  if (!m.target) return '';
+  const hl = new Set(m.hl||[]);
+  const body = m.target.map((l,i)=> hl.has(i) ? `<span class="hl">${esc(l)}</span>` : esc(l)).join('\n');
+  return `<p class="target-label">完成形（${esc(m.file)}）</p><div class="target">${body||' '}</div>`;
+}
+function renderMission(){
+  const m = MISSIONS[mi];
+  const n = m.free ? '自由' : `MISSION ${String(mi+1).padStart(2,'0')}`;
+  const cleared = done[m.id];
+  $('mission').innerHTML = `
+    ${cleared && !m.free ? '<div class="clear-banner">✓ クリア済み</div>' : ''}
+    <div class="mission-eyebrow">${n}</div>
+    <h2 class="mission-title">${m.title}</h2>
+    <p class="goal">${m.goal}</p>
+    ${targetHtml(m)}
+    <details class="hint"><summary>ヒントを見る</summary><ol>${m.hints.map(h=>`<li>${h}</li>`).join('')}</ol></details>
+    <div class="card-actions">
+      <button type="button" id="resetBtn">最初からやり直す</button>
+      ${mi<MISSIONS.length-1 ? `<button type="button" id="nextBtn" class="${cleared?'primary':''}">次のミッション →</button>` : ''}
+    </div>`;
+  $('resetBtn').onclick = () => { load(mi); focusKb(); };
+  const nb=$('nextBtn'); if (nb) nb.onclick = () => { load(mi+1); focusKb(); };
+  renderList();
+}
+function renderList(){
+  const total = MISSIONS.filter(m=>!m.free).length;
+  const c = MISSIONS.filter(m=>!m.free && done[m.id]).length;
+  $('progress').innerHTML = `クリア <b>${c}</b> / ${total}`; $('meter').style.width = (c/total*100)+'%';
+  $('mlist').innerHTML = MISSIONS.map((m,i)=>`<li><button type="button" data-i="${i}" ${i===mi?'aria-current="true"':''}><span class="no">${m.free?'--':String(i+1).padStart(2,'0')}</span><span>${m.title}</span><span class="st ${done[m.id]?'done':''}">${m.free?'':done[m.id]?'✓':''}</span></button></li>`).join('');
+  $('mlist').querySelectorAll('button').forEach(b=> b.onclick = () => { load(Number(b.dataset.i)); focusKb(); });
+}
+function check(){
+  const m = MISSIONS[mi];
+  if (m.free || done[m.id] && S.cleared) return;
+  if (m.check(S)){ S.cleared = true; if (!done[m.id]){ done[m.id]=true; saveDone(); } const f=$('flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); renderMission(); }
+}
+
+/* ================= input ================= */
+const kb = $('kb');
+function focusKb(){ try { kb.focus({preventScroll:true}); } catch(e){ kb.focus(); } }
+termEl.addEventListener('mousedown', e => { e.preventDefault(); focusKb(); });
+termEl.addEventListener('touchend', () => focusKb());
+kb.addEventListener('focus', ()=> termEl.classList.add('focused'));
+kb.addEventListener('blur', ()=> termEl.classList.remove('focused'));
+let handledByKeydown = false;
+const NAMED = {Escape:'Esc', Enter:'Enter', Backspace:'Backspace', ArrowLeft:'Left', ArrowRight:'Right', ArrowUp:'Up', ArrowDown:'Down', Tab:'Tab', Delete:'Delete', Home:'Home', End:'End'};
+kb.addEventListener('keydown', e => {
+  if (e.isComposing || e.keyCode===229) return;
+  let k=null;
+  if (e.ctrlKey && !e.altKey && !e.metaKey && e.key.length===1){ const ch=e.key.toLowerCase(); if (ch==='[') k='Esc'; else if (ch==='c') k='Esc'; else k='C-'+ch; }
+  else if (e.metaKey || e.altKey) return;
+  else if (NAMED[e.key]) k=NAMED[e.key];
+  else if (e.key.length===1) k=e.key;
+  if (!k) return;
+  e.preventDefault(); handledByKeydown=true; handle(k);
+});
+kb.addEventListener('input', e => {
+  if (!handledByKeydown && e.data && !e.isComposing){ for (const ch of e.data) handle(ch); }
+  handledByKeydown=false; kb.value='';
+});
+kb.addEventListener('compositionend', e => { if (e.data){ for (const ch of e.data) handle(ch); } kb.value=''; });
+document.querySelectorAll('.keys button').forEach(b => {
+  b.addEventListener('mousedown', e => e.preventDefault());
+  b.addEventListener('click', () => { handle(b.dataset.key); focusKb(); });
+});
+
+
+/* ================= background rain ================= */
+(function(){
+  const cv = $('rain'); if (!cv || !cv.getContext) return;
+  const ctx = cv.getContext('2d');
+  const words = [':wq','dd','yy','hjkl','u','p','/','gg','G','x','cw','o',':q!','ZZ','i','Esc','$','0','dw',':%s','n','.','3dd','w','b'];
+  let W=0,H=0,cols=[];
+  function size(){ const d=Math.min(2,window.devicePixelRatio||1); W=cv.clientWidth; H=cv.clientHeight; cv.width=W*d; cv.height=H*d; ctx.setTransform(d,0,0,d,0,0);
+    const n=Math.max(8,Math.floor(W/90)); cols=Array.from({length:n},(_,i)=>({x:(i+Math.random()*.6)*(W/n), y:Math.random()*H, v:.25+Math.random()*.6, w:words[(Math.random()*words.length)|0], a:.12+Math.random()*.25, c:Math.random()<.2?'255,61,168':'54,230,255'})); }
+  size(); window.addEventListener('resize', size);
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function draw(){
+    ctx.clearRect(0,0,W,H); ctx.font='600 14px "JetBrains Mono", monospace';
+    for (const c of cols){ ctx.fillStyle=`rgba(${c.c},${c.a})`; ctx.shadowColor=`rgba(${c.c},.8)`; ctx.shadowBlur=8; ctx.fillText(c.w, c.x, c.y);
+      if (!reduce){ c.y+=c.v; if (c.y>H+20){ c.y=-20; c.w=words[(Math.random()*words.length)|0]; } } }
+    if (!reduce) requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+load(mi);
+focusKb();
+})();
+</script>
+
+</body>
+</html>
