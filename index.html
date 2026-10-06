@@ -131,6 +131,8 @@ button.danger{border-color:var(--danger); color:var(--danger);}
 .modebar{display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px;}
 .mode-chip{font-family:var(--font-mono); font-weight:700; font-size:13px; letter-spacing:.12em; color:var(--term-bg); border-radius:2px; padding:4px 12px; background:var(--normal); box-shadow:0 0 14px var(--normal); transition:background .15s, box-shadow .15s;}
 .mode-chip.insert{background:var(--insert); box-shadow:0 0 14px var(--insert);} .mode-chip.command{background:var(--command); box-shadow:0 0 14px var(--command);} .mode-chip.shell{background:var(--fg-faint); box-shadow:none;}
+.keycount{margin-left:auto; font-family:var(--font-mono); font-size:13px; font-variant-numeric:tabular-nums; color:var(--accent); border:1px solid rgba(54,230,255,.45); border-radius:3px; padding:3px 10px; box-shadow:0 0 10px rgba(54,230,255,.25);}
+.keycount.over{color:var(--danger); border-color:var(--danger); box-shadow:0 0 10px rgba(255,107,139,.4);}
 .mode-help{color:var(--fg-soft); font-size:13.5px; min-width:0;}
 .mode-help kbd{font-family:var(--font-mono); color:var(--accent);}
 .term{--mc:var(--normal); position:relative; background:var(--term-bg); border-radius:6px; padding:30px 0 0; cursor:text; overflow:hidden; border:1px solid var(--mc);
@@ -197,7 +199,7 @@ html.fx-off *{animation:none!important; transition:none!important;}
       <p>ブラウザの中で動くviの練習機です。ミッションを順にクリアしながら、モードの切り替え、移動、編集、保存と終了を手で覚えましょう。何を打ってもあなたのサーバーには影響しません。</p>
     </div>
     <div class="top-right">
-      <div class="progress-pill"><span id="progress">クリア <b>0</b> / 26</span><div class="meter"><i id="meter"></i></div></div>
+      <div class="progress-pill"><span id="progress">クリア <b>0</b> / 40</span><div class="meter"><i id="meter"></i></div></div>
       <button type="button" class="fx-toggle" id="fxToggle" aria-pressed="true">演出：ON</button>
     </div>
   </header>
@@ -223,6 +225,7 @@ html.fx-off *{animation:none!important; transition:none!important;}
       <div class="modebar">
         <span class="mode-chip" id="modeChip">NORMAL</span>
         <span class="mode-help" id="modeHelp"></span>
+        <span class="keycount" id="keyCount" hidden></span>
       </div>
       <div class="term focused" id="term">
         <div class="term-bar"><i></i><i></i><i></i><span id="termTitle">tanaka@ubuntu: ~</span></div>
@@ -253,6 +256,8 @@ html.fx-off *{animation:none!important; transition:none!important;}
             <dt>ls / ls -l</dt><dd>ファイル一覧</dd>
             <dt>cat ファイル名</dt><dd>中身を表示</dd>
             <dt>rm ファイル名</dt><dd>ファイルを削除</dd>
+            <dt>export EDITOR=vi</dt><dd>既定のエディタを vi に</dd>
+            <dt>crontab -e / -l</dt><dd>cron の編集 / 表示</dd>
             <dt>Tab / ↑</dt><dd>補完 / 履歴</dd></dl></div>
           <div><h3>モード</h3><dl>
             <dt>i a I A o O</dt><dd>挿入モードへ</dd>
@@ -274,7 +279,8 @@ html.fx-off *{animation:none!important; transition:none!important;}
             <dt>dw cw D J</dt><dd>単語削除・書換・行末まで削除・連結</dd>
             <dt>u Ctrl+R .</dt><dd>取消・やり直し・繰り返し</dd></dl></div>
           <div><h3>検索・置換・設定</h3><dl>
-            <dt>/abc n N</dt><dd>検索と次の候補</dd>
+            <dt>/abc ?abc</dt><dd>下へ検索 / 上へ検索</dd>
+            <dt>n N</dt><dd>同じ向き / 逆向きに次へ</dd>
             <dt>:%s/a/b/g</dt><dd>全体を置換</dd>
             <dt>:set nu</dt><dd>行番号を表示</dd>
             <dt>:12</dt><dd>12行目へ</dd></dl></div>
@@ -300,6 +306,9 @@ const ITEMS_X = ITEMS.map((l,i)=> i===14 ? 'X'+l : l);
 const GG = ['Xbegin','# 1','# 2','# 3','# 4','# 5','# 6','# 7','# 8','# 9','# 10','# 11','# 12','# 13','# 14','# 15','# 16','Xend'];
 const APP_TODO = [...APP.slice(0,5),'# TODO: delete this line',...APP.slice(5)];
 const LOG = ['INFO  start','ERROR disk full','INFO  retry','ERROR timeout','INFO  done'];
+const LOG3 = ['ERROR boot failed','INFO  retry','ERROR disk full','INFO  retry','ERROR last error','INFO  done'];
+const WEB = ['web01','web02','web03','web04','web05'];
+const CRON_T = ['# m h  dom mon dow   command'];
 const MISSIONS = [
   /* ---------- 基本 ---------- */
   { id:'quit', stage:'基本', title:'viから抜け出す', file:'memo.txt', lines:['Hello vi','This is my first memo.'],
@@ -317,6 +326,13 @@ const MISSIONS = [
     hints:['<code>:q</code> だと E37 のエラーで閉じられません。','変更を捨てて閉じるのは <code>:q!</code> です。'],
     check:S => S.exited && eq(S.saved, ['Hello vi','This is my first memo.']),
     miss:S => S.exited && !eq(S.saved, ['Hello vi','This is my first memo.']) ? '終了はできましたが、消された状態のまま保存されてしまいました。変更を捨てて閉じるのは <code>:q!</code> です。「最初からやり直す」で再挑戦できます。' : '' },
+
+  { id:'ZZ', stage:'基本', title:'ZZ で保存して終了する', file:'memo.txt', lines:['Hello vi'],
+    goal:'<b><code>ZZ</code></b> の練習です。<code>o</code> で2行目に <code>Bye vi</code> と追加し、<code>Esc</code> のあと <b>コロンを付けずに</b> 大文字の <code>ZZ</code> で保存して終了してください。',
+    target:['Hello vi','Bye vi'], hl:[1],
+    hints:['<code>ZZ</code> は <code>:x</code> と同じく「変更があれば保存して終了」。','ノーマルモードで <code>Shift</code> を押しながら <code>z</code> を2回。','LPICでは「<code>ZZ</code> はコロンなしで打つ」点がよく問われます。'],
+    check:S => S.exited && S.via==='ZZ' && eq(S.saved, ['Hello vi','Bye vi']),
+    miss:S => S.exited && S.via!=='ZZ' && eq(S.saved, ['Hello vi','Bye vi']) ? '保存して終了はできましたが、このミッションでは <code>ZZ</code> で終了してください。<code>:wq</code> と同じ結果になることを確かめましょう。' : '' },
 
   /* ---------- 移動 ---------- */
   { id:'move', stage:'移動', title:'移動して1文字消す', file:'app.conf', lines:['server_name = test01','port = 8080','log_level = deXbug','max_clients = 100','timeout = 30'],
@@ -355,6 +371,16 @@ const MISSIONS = [
     hints:['<code>/#</code> と打って <code>Enter</code> で # に移動します。','<code>D</code>（大文字）は <code>d$</code> と同じ意味です。'] },
 
   /* ---------- 入力 ---------- */
+  { id:'ins-i', stage:'入力', title:'i：カーソルの「前」に入力する', file:'word.txt', lines:['im editor'],
+    goal:'<b><code>i</code> と <code>a</code> の違い</b>を体験する1問目です。ノーマルモードのカーソルは文字の<b>上</b>に乗っています。開いた直後、カーソルは先頭の <code>i</code> の上です。カーソルを<b>動かさずに</b> <code>i</code> を押して <code>v</code> を入力し、<code>vim editor</code> にして保存してください。',
+    target:['vim editor'], hl:[0],
+    hints:['<code>i</code>（insert）は、カーソルが乗っている文字の<b>前</b>から入力を始めます。','<code>i</code> → <code>v</code> → <code>Esc</code> → <code>:w</code>。','試しに <code>a</code> でやるとどうなるかも、あとで比べてみましょう。'],
+    miss:S => eq(S.saved, ['ivm editor']) ? '<code>ivm editor</code> になりました。<code>a</code> はカーソルの<b>後ろ</b>に入力します。カーソルの<b>前</b>に入れたいときは <code>i</code> です。「最初からやり直す」で比べてみましょう。' : '' },
+  { id:'ins-a', stage:'入力', title:'a：カーソルの「後ろ」に入力する', file:'word.txt', lines:['vm editor'],
+    goal:'<b><code>i</code> と <code>a</code> の違い</b>を体験する2問目です。今度はカーソルが先頭の <code>v</code> の上にあります。カーソルを<b>動かさずに</b> <code>a</code> を押して <code>i</code> を入力し、<code>vim editor</code> にして保存してください。',
+    target:['vim editor'], hl:[0],
+    hints:['<code>a</code>（append）は、カーソルが乗っている文字の<b>後ろ</b>から入力を始めます。','<code>a</code> → <code>i</code> → <code>Esc</code> → <code>:w</code>。','<code>i</code> を使うと <code>v</code> の前に入ってしまいます。'],
+    miss:S => eq(S.saved, ['ivm editor']) ? '<code>ivm editor</code> になりました。<code>i</code> はカーソルの<b>前</b>に入力します。カーソルの<b>後ろ</b>に入れたいときは <code>a</code> です。「最初からやり直す」で比べてみましょう。' : '' },
   { id:'A', stage:'入力', title:'行末に追記する', file:'hosts.allow', lines:['allow = 192.168.1.10','deny = all'],
     goal:'<b>行末からの入力</b>の練習です。1行目で <code>A</code> を押して行末から入力を始め、<code>,192.168.1.11</code> を追記して保存してください。',
     target:['allow = 192.168.1.10,192.168.1.11','deny = all'], hl:[0],
@@ -387,6 +413,24 @@ const MISSIONS = [
     hints:['<code>8G</code> → <code>I</code> → <code>#</code> → <code>Esc</code>。','<code>j</code> で下の行へ移動して <code>.</code>。これをもう一度。','<code>.</code> は直前の変更（ここでは「行頭に # を挿入」）を繰り返します。'] },
 
   /* ---------- コピー・移動 ---------- */
+  { id:'p', stage:'コピー', title:'p：カーソル行の「下」に貼り付ける', file:'order.txt', lines:['step 2','step 1','step 3'],
+    goal:'<b><code>p</code> と <code>P</code> の違い</b>を体験する1問目です。1行目の <code>step 2</code> を <code>dd</code> で切り取り、そのまま <code>p</code> で貼り付けて、<code>step 1 → 2 → 3</code> の順に並べ替えて保存してください。',
+    target:['step 1','step 2','step 3'], hl:[1],
+    hints:['<code>dd</code> で切り取ると、カーソルは次の行（step 1）に移ります。','<code>p</code> はカーソル行の<b>下</b>に貼り付けます。','<code>ddp</code> は「行の入れ替え」の定番テクニックです。'],
+    miss:S => eq(S.saved, ['step 2','step 1','step 3']) ? '並びが元のままです。<code>P</code> はカーソル行の<b>上</b>に貼り付けるので、切り取った場所に戻ってしまいます。下に貼るのは <code>p</code> です。' : '' },
+  { id:'P', stage:'コピー', title:'P：カーソル行の「上」に貼り付ける', file:'servers.txt', lines:['web01','# web servers'],
+    goal:'<b><code>p</code> と <code>P</code> の違い</b>を体験する2問目です。2行目のコメント <code># web servers</code> を <code>dd</code> で切り取り、1行目の<b>上</b>に大文字の <code>P</code> で貼り付けて保存してください。',
+    target:['# web servers','web01'], hl:[0],
+    hints:['<code>j</code> で2行目へ → <code>dd</code>。カーソルは1行目に戻ります。','<code>P</code>（大文字）はカーソル行の<b>上</b>に貼り付けます。'],
+    miss:S => eq(S.saved, ['web01','# web servers']) ? '並びが元のままです。<code>p</code> はカーソル行の<b>下</b>に貼り付けます。上に貼るのは大文字の <code>P</code> です。' : '' },
+  { id:'5yy', stage:'コピー', title:'複数行をまとめてコピーする', file:'servers.txt', lines:WEB,
+    goal:'<b>数字付きのコピー</b>の練習です。1行目で <code>5yy</code> を押して5行まとめてコピーし、<code>G</code> で最終行へ移動して <code>p</code> で貼り付け、10行にして保存してください。',
+    target:[...WEB, ...WEB], hl:[5,6,7,8,9],
+    hints:['<code>5yy</code> は「5行ヤンク（コピー）」。画面下に <code>5 lines yanked</code> と出ます。','<code>G</code> → <code>p</code> で最終行の下に5行が増えます。','LPICでは「<code>5yy</code> → <code>p</code> で何行増えるか」のように数字との組み合わせが問われます。'] },
+  { id:'yw', stage:'コピー', title:'単語だけをコピーする', file:'users.conf', lines:['user = admin','group = '],
+    goal:'<b>単語単位のコピー</b>の練習です。1行目の <code>admin</code> を <code>yw</code> でコピーし、2行目の末尾に <code>p</code> で貼り付けて <code>group = admin</code> にして保存してください。',
+    target:['user = admin','group = admin'], hl:[1],
+    hints:['<code>w</code> を2回で <code>admin</code> の先頭へ → <code>yw</code>。','<code>j</code> で2行目、<code>$</code> で行末（最後の空白）へ。','<code>p</code> はカーソルの<b>後ろ</b>に貼り付けます。<code>yy</code> と違い、行ではなく文字として入ります。'] },
   { id:'mvline', stage:'コピー', title:'行を移動する（切り取り＆貼り付け）', file:'app.ini', lines:['[server]','port = 80','[client]','timeout = 30','host = example.com'],
     goal:'<b>切り取りと貼り付け</b>の練習です。最終行の <code>host = example.com</code> を <code>dd</code> で切り取り、<code>[server]</code> の行の下に <code>p</code> で貼り付けて保存してください。',
     target:['[server]','host = example.com','port = 80','[client]','timeout = 30'], hl:[1],
@@ -401,6 +445,11 @@ const MISSIONS = [
     goal:'<b>検索の「次へ」</b>の練習です。<code>/ERROR</code> で検索し、<code>n</code> で<b>2つ目</b>の ERROR 行（<code>ERROR timeout</code>）へ進んで、<code>dd</code> で削除して保存してください。',
     target:LOG.filter(l=>l!=='ERROR timeout'),
     hints:['<code>/ERROR</code> + <code>Enter</code> で1つ目へ。','<code>n</code> で次の候補へ。<code>N</code> なら逆向き。','2つ目に来たら <code>dd</code> → <code>:w</code>。'] },
+  { id:'searchq', stage:'検索・置換', title:'? で上向きに検索する', file:'app.log', lines:LOG3,
+    goal:'<b>上向きの検索</b>の練習です。開いた直後（1行目）のまま <code>?ERROR</code> で<b>上</b>に向かって検索してください。先頭より上はないので、ファイルの末尾に回り込んで<b>最後の</b> ERROR 行に止まります。その行を <code>dd</code> で削除して保存してください。',
+    target:LOG3.filter(l=>l!=='ERROR last error'),
+    hints:['<code>?ERROR</code> + <code>Enter</code>。画面下に <code>search hit TOP, continuing at BOTTOM</code> と出ます。','<code>/</code> は下向き、<code>?</code> は上向き。<code>n</code> はそれぞれ同じ向きに進みます。','止まった行で <code>dd</code> → <code>:w</code>。'],
+    miss:S => eq(S.saved, LOG3.filter(l=>l!=='ERROR disk full')) ? '2つ目の ERROR 行を消してしまいました。<code>/</code> は下向きに検索します。上向きの <code>?</code> を使うと、先頭から末尾へ回り込みます。' : '' },
   { id:'sub1', stage:'検索・置換', title:'1行だけ置換する', file:'users.conf', lines:['user = guest','group = guest'],
     goal:'<b>1行だけの置換</b>の練習です。1行目にカーソルがある状態で <code>:s/guest/admin/</code> を実行し、1行目だけを <code>admin</code> に変えて保存してください（2行目は guest のまま）。',
     target:['user = admin','group = guest'], hl:[0],
@@ -425,17 +474,47 @@ const MISSIONS = [
     check:S => S.exited && S.exitBy==='quit' && eq(S.saved, APP),
     miss:S => S.exited && S.exitBy==='discard' ? '<code>:q!</code> でも変更は捨てられますが、このミッションでは <code>:e!</code> で戻してから <code>:q</code> で閉じてください。' : '' },
 
+  /* ---------- シェル連携 ---------- */
+  { id:'editor', stage:'シェル連携', title:'EDITOR を設定して crontab を編集する', file:'crontab', lines:[], isNew:true, cron:true,
+    goal:'<b>環境変数 EDITOR</b> の練習です。<code>crontab -e</code> は EDITOR に指定されたエディタを開きます。まず <code>export EDITOR=vi</code> を実行し、<code>crontab -e</code> で開いたviの最終行の下に <code>0 3 * * * /usr/local/bin/backup.sh</code> を追加して <code>:wq</code> で保存してください。',
+    target:[...CRON_T,'0 3 * * * /usr/local/bin/backup.sh'], hl:[1],
+    hints:['EDITOR を設定せずに <code>crontab -e</code> を打つとどうなるかも試してみましょう。','<code>echo $EDITOR</code> で設定を確認できます。','viが開いたら <code>G</code> → <code>o</code> → 入力 → <code>Esc</code> → <code>:wq</code>。<code>crontab -l</code> で登録内容を確認できます。'],
+    check:S => eq(S.crontab, [...CRON_T,'0 3 * * * /usr/local/bin/backup.sh']) },
+
   /* ---------- 総合 ---------- */
   { id:'final', stage:'総合', title:'総合問題：設定変更', file:'app.conf', lines:APP,
     goal:'これまでの<b>総まとめ</b>です。検索・書き換え・置換・行の追加と削除を組み合わせて、次の4つをすべて行い、保存して終了してください。<br>① port を 80 に ② log_level を info に ③ timeout の下に <code>keepalive = on</code> を追加 ④ legacy_ の3行を削除',
     target:['# sample config','server_name = test01','port = 80','log_level = info','max_clients = 100','timeout = 30','keepalive = on','# legacy settings'], hl:[2,3,6], needExit:true,
     hints:['順番は自由。行番号が変わる操作（追加・削除）は後回しにすると楽です。','<code>:%s/debug/info/</code> や <code>cw</code> を活用。','間違えたら <code>u</code>、全部やり直すなら <code>:e!</code>。'] },
+  /* ---------- チャレンジ ---------- */
+  { id:'ch-dollar', stage:'キー数チャレンジ', title:'2キーで行末の ; を消せ', file:'app.conf', lines:['port = 80;'], maxKeys:2,
+    goal:'<b>キー数チャレンジ</b>です。行末の <code>;</code> を消して保存してください。ただし編集に使えるのは<b>2キーまで</b>（<code>:w</code> などの保存・終了コマンドは数えません）。',
+    target:['port = 80'],
+    hints:['<code>l</code> を連打すると10キー近くかかります。','行末へ一発で飛ぶキーは何でしたか？'] },
+  { id:'ch-r', stage:'キー数チャレンジ', title:'4キーで 30 を 60 に変えろ', file:'app.conf', lines:['timeout = 30'], maxKeys:4,
+    goal:'<b>キー数チャレンジ</b>です。<code>timeout = 30</code> を <code>timeout = 60</code> にして保存してください。編集は<b>4キーまで</b>。',
+    target:['timeout = 60'],
+    hints:['<code>$</code> で行末の <code>0</code> へ、<code>h</code> で <code>3</code> へ。','1文字だけ置き換えるなら挿入モードに入る必要はありません。<code>r</code> を使いましょう。'] },
+  { id:'ch-goto', stage:'キー数チャレンジ', title:'5キーで15行目を消せ', file:'list.txt', lines:ITEMS.map((l,i)=> i===14 ? 'DELETE ME' : l), maxKeys:5,
+    goal:'<b>キー数チャレンジ</b>です。15行目の <code>DELETE ME</code> の行を削除して保存してください。編集は<b>5キーまで</b>。',
+    target:ITEMS.filter((_,i)=>i!==14),
+    hints:['<code>j</code> を14回押していては間に合いません。','行番号で飛ぶ <code>15G</code> と、行削除の <code>dd</code> を組み合わせます。'] },
+  { id:'ch-3dd', stage:'キー数チャレンジ', title:'5キーで legacy の3行を消せ', file:'app.conf', lines:APP, maxKeys:5,
+    goal:'<b>キー数チャレンジ</b>です。8〜10行目の <code>legacy_</code> で始まる3行を削除して保存してください。編集は<b>5キーまで</b>。',
+    target:APP.slice(0,7),
+    hints:['<code>dd</code> を3回だと移動も含めて足りません。','数字を付けると回数になります。移動も削除も数字が使えます。'] },
+  { id:'ch-dot', stage:'キー数チャレンジ', title:'9キーで3行をコメントアウトせよ', file:'app.conf', lines:APP, maxKeys:9,
+    goal:'<b>キー数チャレンジ</b>です。8〜10行目の行頭に <code>#</code> を付けて保存してください。編集は<b>9キーまで</b>。同じ操作を3回繰り返すと13キーかかります。',
+    target:APP.map((l,i)=> i>=7 ? '#'+l : l),
+    hints:['1行目だけ普通に <code>I#</code> → <code>Esc</code>。','2行目からは <code>j</code> と「直前の変更を繰り返す」キーで。'] },
+
   { id:'free', stage:'自由', title:'自由練習', file:'app.conf', lines:APP, free:true,
     goal:'課題はありません。早見表のコマンドを自由に試してください。<code>:q!</code> で終了しても、<code>vi app.conf</code> でもう一度開けます。<code>ls</code> や <code>cat</code> も使えます。',
     hints:['<code>dw</code> や <code>d$</code> のように「動詞＋移動」を組み合わせてみましょう。','<code>.</code> で直前の変更を繰り返せます。'],
     check:() => false },
 ];
-for (const m of MISSIONS){ if (!m.check && m.target){ const t=m.target; m.check = m.needExit ? (S => S.exited && eq(S.saved, t)) : (S => eq(S.saved, t)); } }
+for (const m of MISSIONS){ if (m.maxKeys){ const t=m.target, mx=m.maxKeys; m.check = S => eq(S.saved,t) && S.keys!==undefined && S.keys<=mx; m.miss = S => eq(S.saved,t) && S.keys>mx ? `完成形にはなりましたが、編集に <b>${S.keys}キー</b>かかりました（上限 ${mx}キー）。もっと少ないキーでできる方法を考えてみましょう。「最初からやり直す」で再挑戦できます。` : ''; continue; }
+  if (!m.check && m.target){ const t=m.target; m.check = m.needExit ? (S => S.exited && eq(S.saved, t)) : (S => eq(S.saved, t)); } }
 
 /* ================= progress ================= */
 let done = {};
@@ -452,7 +531,7 @@ function fresh(m){
   return { file:m.file, lines, saved:[...lines], r:0, c:0, want:0, mode:'normal', cmd:'', cmdType:':',
     count:'', op:null, opCount:'', g:false, z:false, rp:false, msg: m.isNew ? `"${m.file}" [New]` : `"${m.file}" ${lines.length}L, ${bytes(lines)}B`, msgType:'',
     undo:[], redo:[], seq:0, reg:{lines:[''], linewise:false}, search:'', sdir:1, nu:false, top:0,
-    exited:false, exitBy:'', rec:null, last:null, didChange:false, insSnap:null, replay:false, cleared:false };
+    exited:false, exitBy:'', keys:0, cmdKeys:[], via:'', rec:null, last:null, didChange:false, insSnap:null, replay:false, cleared:false };
 }
 let SH;
 function load(i){
@@ -485,6 +564,10 @@ function runShell(line){
   const t = line.trim(); if (!t) return;
   SH.cmdHist.push(t); SH.hIdx=-1;
   let a = t.split(/\s+/); if (a[0]==='sudo') a = a.slice(1); if (!a.length) return;
+  SH.env = SH.env || {}; let tmpEnv = {};
+  while (a.length && /^[A-Za-z_]\w*=/.test(a[0])){ const [kk,...vv]=a[0].split('='); tmpEnv[kk]=vv.join('='); a=a.slice(1); }
+  if (!a.length){ Object.assign(SH.env, tmpEnv); return; }
+  const env = Object.assign({}, SH.env, tmpEnv);
   const cmd=a[0], args=a.slice(1).filter(x=>!x.startsWith('-')), opts=a.slice(1).filter(x=>x.startsWith('-')).join('');
   const files = Object.keys(SH.fs).sort();
   switch(cmd){
@@ -503,8 +586,19 @@ function runShell(line){
     case 'pwd': out('/home/tanaka'); return;
     case 'whoami': out('tanaka'); return;
     case 'cd': return;
-    case 'echo': out(a.slice(1).join(' ')); return;
-    case 'help': out('使えるコマンド: vi ファイル名 / ls [-l] / cat ファイル名 / rm ファイル名 / clear / pwd','warn'); return;
+    case 'echo': out(a.slice(1).join(' ').replace(/\$\{?(\w+)\}?/g, (_,v)=> v==='HOME' ? '/home/tanaka' : v==='USER' ? 'tanaka' : (SH.env[v]||''))); return;
+    case 'export': for (const x of a.slice(1)){ const m=x.match(/^([A-Za-z_]\w*)=(.*)$/); if (m) SH.env[m[1]]=m[2].replace(/^["']|["']$/g,''); } return;
+    case 'env': case 'printenv': out('HOME=/home/tanaka'); out('USER=tanaka'); out('SHELL=/bin/bash'); Object.entries(SH.env).forEach(([k,v])=>out(k+'='+v)); return;
+    case 'crontab':
+      if (opts.includes('l')){ if (SH.crontab) SH.crontab.forEach(l=>out(l)); else out('no crontab for tanaka'); return; }
+      if (opts.includes('e')){
+        const ed = env.EDITOR || env.VISUAL || '';
+        if (!SH.crontab) out('no crontab for tanaka - using an empty one');
+        if (!/^(vi|vim|\/usr\/bin\/vi|\/usr\/bin\/vim)$/.test(ed)){ out(ed ? `（${ed} を起動しようとしました）` : '（EDITOR が未設定なので、Ubuntu の既定エディタ nano が起動しました）','warn'); out('※この練習機では nano は使えません。export EDITOR=vi を設定してから、もう一度 crontab -e を実行しましょう','warn'); return; }
+        S = fresh({file:'/tmp/crontab.kF3x1a/crontab', lines: SH.crontab || CRON_T}); S.cron = true; return;
+      }
+      out('crontab: usage: crontab -e / crontab -l','warn'); return;
+    case 'help': out('使えるコマンド: vi ファイル名 / ls [-l] / cat ファイル名 / rm ファイル名 / clear / pwd / export / echo / crontab -e / crontab -l','warn'); return;
     case 'nano': case 'emacs': case 'vscode': case 'code': out('この練習機では vi だけが使えます','warn'); return;
     case 'exit': case 'logout': out('練習機ではログアウトできません。左のミッションを続けましょう','warn'); return;
   }
@@ -661,8 +755,11 @@ function put(before, n){
 function enterInsert(noSnap){ if(!noSnap) snap(); S.insSnap = S.undo.length; S.mode='insert'; setMsg(''); }
 
 /* ---------- ex commands ---------- */
-function write(name){ const f=name||S.file; const isNew=!SH.fs[f]; SH.fs[f]=[...S.lines]; if (!name) S.saved=[...S.lines]; setMsg(`"${f}"${isNew?' [New]':''} ${S.lines.length}L, ${bytes(S.lines)}B written`); }
-function exitVi(by){ SH.lastExit={file:S.file, by}; S=null; }
+function write(name){ if (S.cron && !name){ S.saved=[...S.lines]; SH.cronDraft=[...S.lines]; setMsg(`"${S.file}" ${S.lines.length}L, ${bytes(S.lines)}B written`); return; }
+  const f=name||S.file; const isNew=!SH.fs[f]; SH.fs[f]=[...S.lines]; SH.writeKeys=SH.writeKeys||{}; SH.writeKeys[f]=S.keys; if (!name) S.saved=[...S.lines]; setMsg(`"${f}"${isNew?' [New]':''} ${S.lines.length}L, ${bytes(S.lines)}B written`); }
+function exitVi(by){ SH.lastExit={file:S.file, by, via:S.via||''};
+  if (S.cron){ if (SH.cronDraft && !eq(SH.cronDraft, SH.crontab||[])){ SH.crontab=[...SH.cronDraft]; out('crontab: installing new crontab'); } else out('crontab: no changes made to crontab'); SH.cronDraft=null; }
+  S=null; }
 function ex(cmd){
   const c = cmd.trim();
   if (c==='') return;
@@ -712,7 +809,7 @@ function splitDelim(s, d){ const out=['']; for (let i=0;i<s.length;i++){ if (s[i
 /* ---------- key handlers ---------- */
 function normalKey(k){
   if (S.rp){ S.rp=false; if (k.length===1 && len(S.r)>0){ const n=Math.max(1,parseInt(S.count||'1',10)); S.count=''; if (S.c+n<=len(S.r)){ snap(); const l=S.lines[S.r]; S.lines[S.r]=l.slice(0,S.c)+k.repeat(n)+l.slice(S.c+n); S.c+=n-1; } } else S.count=''; return; }
-  if (S.z){ S.z=false; S.count=''; if (k==='Z'){ ex('x'); } else if (k==='Q'){ ex('q!'); } return; }
+  if (S.z){ S.z=false; S.count=''; if (k==='Z'){ S.keys-=2; S.via='ZZ'; ex('x'); } else if (k==='Q'){ ex('q!'); } return; }
   if (/^[1-9]$/.test(k) || (k==='0' && (S.count!=='' ))){ S.count+=k; return; }
   const hasCount = S.count!=='' || S.opCount!=='';
   const n = Math.max(1,parseInt(S.count||'1',10)) * Math.max(1,parseInt(S.opCount||'1',10));
@@ -822,7 +919,10 @@ function handle(k){
   if (S.mode==='normal' && !pending() && k!=='.'){ S.rec=[]; S.didChange=false; }
   if (S.rec && S.mode!=='command') S.rec.push(k);
   if (S.mode==='normal' && !pending() && k!=='Esc' && !(k===':'||k==='/'||k==='?')) { if (S.msgType!=='err' || true) { S.msg=''; S.msgType=''; } }
+  const bMode=S.mode, bCmd=S.cmd, bType=S.cmdType;
+  if (bMode==='command' || (bMode==='normal' && !pending() && k===':')) { if (bMode!=='command') S.cmdKeys=[]; S.cmdKeys.push(k); } else S.keys++;
   dispatch(k);
+  if (S && bMode==='command' && S.mode!=='command'){ const sq = bType===':' && k==='Enter' && /^(w!?|wq!?|x!?|q!?|qa!?)$/.test(bCmd.trim()); if (!sq) S.keys += S.cmdKeys.length; S.cmdKeys=[]; }
   if (S && S.mode==='command') S.rec=null;
   if (S && S.mode==='normal' && !pending() && S.rec){ if (S.didChange && k!=='.') S.last=S.rec; S.rec=null; }
   render(); check();
@@ -885,6 +985,8 @@ function render(){
 }
 function label(k){ const map={'Esc':'Esc','Enter':'Enter','Backspace':'BS','Left':'←','Right':'→','Up':'↑','Down':'↓',' ':'␣','Tab':'Tab','Delete':'Del','Home':'Home','End':'End'}; if (map[k]) return map[k]; if (k.startsWith('C-')) return 'Ctrl+'+k.slice(2).toUpperCase(); return k; }
 function renderLog(){
+  { const m=MISSIONS[mi], kc=$('keyCount');
+    if (m.maxKeys){ const n = S ? S.keys : ((SH.writeKeys||{})[m.file] ?? 0); kc.hidden=false; kc.textContent=`編集キー数 ${n} / ${m.maxKeys}`; kc.classList.toggle('over', n>m.maxKeys); } else kc.hidden=true; }
   const el=$('log');
   el.innerHTML = '<span>押したキー：</span>' + (keylog.length ? keylog.map(e=>`<kbd class="k-${e.mode}">${esc(label(e.k))}</kbd>`).join('') : '<span>（まだありません）</span>');
 }
@@ -905,7 +1007,7 @@ function renderMission(){
     <div class="mission-eyebrow">${n}</div>
     <h2 class="mission-title">${m.title}</h2>
     <p class="goal">${m.goal}</p>
-    <p class="start-line">${m.startInVi ? '▶ このミッションは<b>編集中の画面</b>から始まります' : `▶ シェルで <code>vi ${esc(m.file)}</code> と打って開きます`}</p>
+    <p class="start-line">${m.cron ? '▶ シェルで <code>export EDITOR=vi</code> → <code>crontab -e</code> の順に打ちます' : m.startInVi ? '▶ このミッションは<b>編集中の画面</b>から始まります' : `▶ シェルで <code>vi ${esc(m.file)}</code> と打って開きます`}</p>
     ${targetHtml(m)}
     <details class="hint"><summary>ヒントを見る</summary><ol>${m.hints.map(h=>`<li>${h}</li>`).join('')}</ol></details>
     <div class="miss-note" id="missNote" hidden></div>
@@ -928,7 +1030,7 @@ function renderList(){
 function check(){
   const m = MISSIONS[mi];
   if (m.free || (done[m.id] && SH.cleared)) return;
-  const C = { exited: !S && !!SH.lastExit && SH.lastExit.file===m.file, exitBy: SH.lastExit ? SH.lastExit.by : '', saved: SH.fs[m.file] || [] };
+  const C = { exited: !S && !!SH.lastExit && SH.lastExit.file===m.file, exitBy: SH.lastExit ? SH.lastExit.by : '', via: SH.lastExit ? SH.lastExit.via : '', saved: SH.fs[m.file] || [], crontab: SH.crontab || [], keys: (SH.writeKeys||{})[m.file] };
   const ok = m.check(C);
   const note=$('missNote');
   if (note){
