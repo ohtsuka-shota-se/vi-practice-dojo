@@ -180,7 +180,10 @@ details.ref summary{cursor:pointer; font-weight:700;}
 .ref-grid dt{font-family:var(--font-mono); font-weight:700; white-space:nowrap; color:var(--fg);}
 .ref-grid dd{margin:0; color:var(--fg-soft);}
 .note{font-size:12.5px; color:var(--fg-faint); margin:0;}
-@media (prefers-reduced-motion: reduce){ *{animation:none!important; transition:none!important;} }
+html.fx-off *{animation:none!important; transition:none!important;}
+.top-right{display:flex; flex-direction:column; align-items:flex-end; gap:8px;}
+.fx-toggle{font-family:var(--font-mono); font-size:12px; padding:5px 12px; letter-spacing:.06em;}
+.fx-toggle[aria-pressed="true"]{color:var(--accent); border-color:var(--accent); box-shadow:0 0 10px rgba(54,230,255,.35);}
 </style>
 </head>
 <body>
@@ -193,7 +196,10 @@ details.ref summary{cursor:pointer; font-weight:700;}
       <h1><span class="prompt">&gt;_</span> vi練習道場<span class="caret"></span></h1>
       <p>ブラウザの中で動くviの練習機です。ミッションを順にクリアしながら、モードの切り替え、移動、編集、保存と終了を手で覚えましょう。何を打ってもあなたのサーバーには影響しません。</p>
     </div>
-    <div class="progress-pill"><span id="progress">クリア <b>0</b> / 26</span><div class="meter"><i id="meter"></i></div></div>
+    <div class="top-right">
+      <div class="progress-pill"><span id="progress">クリア <b>0</b> / 26</span><div class="meter"><i id="meter"></i></div></div>
+      <button type="button" class="fx-toggle" id="fxToggle" aria-pressed="true">演出：ON</button>
+    </div>
   </header>
 
   <div class="grid">
@@ -973,16 +979,26 @@ document.querySelectorAll('.keys button').forEach(b => {
   function size(){ const d=Math.min(2,window.devicePixelRatio||1); W=cv.clientWidth; H=cv.clientHeight; cv.width=W*d; cv.height=H*d; ctx.setTransform(d,0,0,d,0,0);
     const n=Math.max(8,Math.floor(W/90)); cols=Array.from({length:n},(_,i)=>({x:(i+Math.random()*.6)*(W/n), y:Math.random()*H, v:.25+Math.random()*.6, w:words[(Math.random()*words.length)|0], a:.12+Math.random()*.25, c:Math.random()<.2?'255,61,168':'54,230,255'})); }
   size(); window.addEventListener('resize', size);
-  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const fxOn = () => !document.documentElement.classList.contains('fx-off');
   function draw(){
     ctx.clearRect(0,0,W,H); ctx.font='600 14px "JetBrains Mono", monospace';
     for (const c of cols){ ctx.fillStyle=`rgba(${c.c},${c.a})`; ctx.shadowColor=`rgba(${c.c},.8)`; ctx.shadowBlur=8; ctx.fillText(c.w, c.x, c.y);
-      if (!reduce){ c.y+=c.v; if (c.y>H+20){ c.y=-20; c.w=words[(Math.random()*words.length)|0]; } } }
-    if (!reduce) requestAnimationFrame(draw);
+      if (fxOn()){ c.y+=c.v; if (c.y>H+20){ c.y=-20; c.w=words[(Math.random()*words.length)|0]; } } }
+    requestAnimationFrame(draw);
   }
   draw();
 })();
 
+/* ---- 演出 ON/OFF ---- */
+(function(){
+  let pref = null; try { pref = localStorage.getItem('viDojoFx'); } catch(e) {}
+  const sysReduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let on = pref ? pref==='on' : !sysReduce;
+  const btn = $('fxToggle');
+  function apply(){ document.documentElement.classList.toggle('fx-off', !on); btn.setAttribute('aria-pressed', String(on)); btn.textContent = '演出：' + (on ? 'ON' : 'OFF'); btn.title = on ? '背景のアニメーションと点滅を止めます' : '背景のアニメーションと点滅を動かします'; }
+  btn.onclick = () => { on = !on; try { localStorage.setItem('viDojoFx', on?'on':'off'); } catch(e) {} apply(); };
+  apply();
+})();
 $('resetAll').onclick = () => { $('resetConfirm').hidden = false; };
 $('resetNo').onclick = () => { $('resetConfirm').hidden = true; };
 $('resetYes').onclick = () => { done = {}; saveDone(); $('resetConfirm').hidden = true; load(0); focusKb(); };
