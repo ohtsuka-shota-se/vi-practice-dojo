@@ -992,8 +992,7 @@ document.querySelectorAll('.keys button').forEach(b => {
 /* ---- 演出 ON/OFF ---- */
 (function(){
   let pref = null; try { pref = localStorage.getItem('viDojoFx'); } catch(e) {}
-  const sysReduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let on = pref ? pref==='on' : !sysReduce;
+  let on = pref ? pref==='on' : true;
   const btn = $('fxToggle');
   function apply(){ document.documentElement.classList.toggle('fx-off', !on); btn.setAttribute('aria-pressed', String(on)); btn.textContent = '演出：' + (on ? 'ON' : 'OFF'); btn.title = on ? '背景のアニメーションと点滅を止めます' : '背景のアニメーションと点滅を動かします'; }
   btn.onclick = () => { on = !on; try { localStorage.setItem('viDojoFx', on?'on':'off'); } catch(e) {} apply(); };
