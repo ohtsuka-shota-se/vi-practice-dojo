@@ -115,6 +115,8 @@ button.primary{background:linear-gradient(90deg, rgba(54,230,255,.25), rgba(255,
 .mlist li button{width:100%; text-align:left; border:1px solid transparent; background:transparent; display:grid; grid-template-columns:28px minmax(0,1fr) auto; gap:8px; align-items:center; padding:7px 8px; box-shadow:none;}
 .mlist li button:hover{background:var(--surface-2); border-color:transparent;}
 .mlist li button[aria-current="true"]{background:var(--accent-soft); border-color:rgba(54,230,255,.45); box-shadow:inset 3px 0 0 var(--accent);}
+.mlist li.stage{font-family:var(--font-mono); font-size:11px; letter-spacing:.14em; color:var(--accent-2); margin:10px 0 2px 8px; text-shadow:0 0 6px rgba(255,61,168,.5);}
+.mlist li.stage:first-child{margin-top:0;}
 .mlist .no{font-family:var(--font-mono); font-size:12px; color:var(--fg-faint); font-variant-numeric:tabular-nums;}
 .mlist .st{font-size:12px; color:var(--fg-faint); font-family:var(--font-mono);}
 .mlist .st.done{color:var(--ok); font-weight:700; text-shadow:0 0 8px rgba(67,245,168,.7);}
@@ -191,7 +193,7 @@ details.ref summary{cursor:pointer; font-weight:700;}
       <h1><span class="prompt">&gt;_</span> vi練習道場<span class="caret"></span></h1>
       <p>ブラウザの中で動くviの練習機です。ミッションを順にクリアしながら、モードの切り替え、移動、編集、保存と終了を手で覚えましょう。何を打ってもあなたのサーバーには影響しません。</p>
     </div>
-    <div class="progress-pill"><span id="progress">クリア <b>0</b> / 11</span><div class="meter"><i id="meter"></i></div></div>
+    <div class="progress-pill"><span id="progress">クリア <b>0</b> / 26</span><div class="meter"><i id="meter"></i></div></div>
   </header>
 
   <div class="grid">
@@ -287,69 +289,147 @@ const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;
 /* ================= missions ================= */
 const APP = ['# sample config','server_name = test01','port = 8080','log_level = debug','max_clients = 100','timeout = 30','# legacy settings','legacy_mode = on','legacy_path = /opt/legacy','legacy_user = nobody'];
 const eq = (a,b) => a.length===b.length && a.every((x,i)=>x===b[i]);
+const ITEMS = Array.from({length:20},(_,i)=>`item ${String(i+1).padStart(2,'0')}`);
+const ITEMS_X = ITEMS.map((l,i)=> i===14 ? 'X'+l : l);
+const GG = ['Xbegin','# 1','# 2','# 3','# 4','# 5','# 6','# 7','# 8','# 9','# 10','# 11','# 12','# 13','# 14','# 15','# 16','Xend'];
+const APP_TODO = [...APP.slice(0,5),'# TODO: delete this line',...APP.slice(5)];
+const LOG = ['INFO  start','ERROR disk full','INFO  retry','ERROR timeout','INFO  done'];
 const MISSIONS = [
-  { id:'quit', title:'viから抜け出す', file:'memo.txt', lines:['Hello vi','This is my first memo.'],
-    goal:'まずは「開き方」と「閉じ方」から。<code>memo.txt</code> をviで開き、何も変更せずに終了してください。',
+  /* ---------- 基本 ---------- */
+  { id:'quit', stage:'基本', title:'viから抜け出す', file:'memo.txt', lines:['Hello vi','This is my first memo.'],
+    goal:'まずは「開き方」と「閉じ方」から。<code>memo.txt</code> をviで開き、何も変更せずに <code>:q</code> で終了してください。',
     hints:['シェルで <code>vi memo.txt</code> と打って <code>Enter</code>。','起動直後はノーマルモードです。','<code>:q</code> と打って <code>Enter</code> を押すと、シェルに戻ります。'],
     check:S => S.exited && S.exitBy!=='write',
     miss:S => S.exited && S.exitBy==='write' ? '終了はできましたが、<code>:wq</code> や <code>:x</code>、<code>ZZ</code> は「保存して終了」です。変更していないファイルを閉じるだけなら <code>:q</code> を使いましょう。「最初からやり直す」で再挑戦できます。' : '' },
-  { id:'discard', title:'変更を捨てて終了する', file:'memo.txt', lines:['Hello vi','This is my first memo.'],
+  { id:'insert', stage:'基本', title:'文字を入力して保存する', file:'hello.txt', lines:[''], isNew:true,
+    goal:'<b>挿入モード</b>の練習です。新しいファイル <code>hello.txt</code> を作り、<code>i</code> で挿入モードに入って <code>Hello vi</code> と入力し、<code>:wq</code> で保存して終了してください。',
+    target:['Hello vi'], needExit:true,
+    hints:['存在しないファイル名で <code>vi hello.txt</code> と開くと、新しいファイルになります（画面下に [New]）。','<code>i</code> で挿入モードに入ります（画面下に -- INSERT --）。','打ち終わったら <code>Esc</code> でノーマルモードへ。','<code>:wq</code> で保存して終了します。'] },
+  { id:'discard', stage:'基本', title:'変更を捨てて終了する', file:'memo.txt', lines:['Hello vi','This is my first memo.'],
     setup:['G','d','d'], startInVi:true,
     goal:'誰かが2行目を消してしまった状態です。この変更は<b>保存せずに</b>終了してください。',
     hints:['<code>:q</code> だと E37 のエラーで閉じられません。','変更を捨てて閉じるのは <code>:q!</code> です。'],
     check:S => S.exited && eq(S.saved, ['Hello vi','This is my first memo.']),
     miss:S => S.exited && !eq(S.saved, ['Hello vi','This is my first memo.']) ? '終了はできましたが、消された状態のまま保存されてしまいました。変更を捨てて閉じるのは <code>:q!</code> です。「最初からやり直す」で再挑戦できます。' : '' },
-  { id:'insert', title:'文字を入力して保存する', file:'hello.txt', lines:[''], isNew:true,
-    goal:'新しいファイル <code>hello.txt</code> を作り、<code>Hello vi</code> と1行だけ入力して、保存して終了してください。',
-    target:['Hello vi'],
-    hints:['存在しないファイル名で <code>vi hello.txt</code> と開くと、新しいファイルになります（画面下に [New]）。','<code>i</code> で挿入モードに入ります（画面下に -- INSERT --）。','打ち終わったら <code>Esc</code> でノーマルモードへ。','<code>:wq</code> で保存して終了します。'],
-    check:S => S.exited && eq(S.saved, ['Hello vi']) },
-  { id:'move', title:'移動して1文字消す', file:'app.conf', lines:['server_name = test01','port = 8080','log_level = deXbug','max_clients = 100','timeout = 30'],
+
+  /* ---------- 移動 ---------- */
+  { id:'move', stage:'移動', title:'移動して1文字消す', file:'app.conf', lines:['server_name = test01','port = 8080','log_level = deXbug','max_clients = 100','timeout = 30'],
     goal:'<b>カーソル移動</b>の練習です。<code>h j k l</code> や <code>w</code> で3行目の <code>X</code> までカーソルを動かし、<code>x</code> で1文字消して保存してください（<code>:w</code> でも <code>:wq</code> でも可）。',
     target:['server_name = test01','port = 8080','log_level = debug','max_clients = 100','timeout = 30'], hl:[2],
-    hints:['<code>j</code> で下の行へ、<code>l</code> や <code>w</code> で右へ移動します。','<code>2j</code> のように数字を付けると、その回数だけ動きます。','X の上で <code>x</code> を押すと1文字削除。'],
-    check:S => eq(S.saved, ['server_name = test01','port = 8080','log_level = debug','max_clients = 100','timeout = 30']) },
-  { id:'dd', title:'不要な行をまとめて削除', file:'app.conf', lines:APP,
+    hints:['<code>j</code> で下の行へ、<code>l</code> や <code>w</code> で右へ移動します。','<code>2j</code> のように数字を付けると、その回数だけ動きます。','X の上で <code>x</code> を押すと1文字削除。'] },
+  { id:'goto', stage:'移動', title:'行番号で一気に飛ぶ', file:'list.txt', lines:ITEMS_X,
+    goal:'<b>行番号ジャンプ</b>の練習です。<code>15G</code>（または <code>:15</code>）で15行目へ一気に飛び、行頭の <code>X</code> を <code>x</code> で消して保存してください。',
+    target:ITEMS, hl:[14],
+    hints:['<code>:set nu</code> で行番号を表示すると確認しやすくなります。','ノーマルモードで <code>1</code> <code>5</code> <code>G</code> と順に押します。','<code>j</code> を14回押すより、ずっと速いはずです。'] },
+  { id:'gG', stage:'移動', title:'先頭と末尾へ移動する', file:'notes.txt', lines:GG,
+    goal:'<b>ファイルの先頭・末尾への移動</b>の練習です。<code>G</code> で最終行へ飛んで <code>X</code> を消し、<code>gg</code> で1行目へ戻ってもう1つの <code>X</code> も消して保存してください。',
+    target:GG.map(l=>l.replace(/^X/,'')), hl:[0,17],
+    hints:['<code>G</code> は最終行の先頭（空白以外の最初の文字）へ移動します。','<code>gg</code> は <code>g</code> を2回。1行目へ移動します。','どちらも行頭に X があるので、移動したらすぐ <code>x</code>。'] },
+  { id:'dollar', stage:'移動', title:'行末へ移動する', file:'app.conf', lines:['port = 80;','timeout = 30;','user = web'],
+    goal:'<b>行末への移動</b>の練習です。1〜2行目の末尾に付いた余計な <code>;</code> を、<code>$</code> で行末へ移動して <code>x</code> で消し、保存してください。',
+    target:['port = 80','timeout = 30','user = web'], hl:[0,1],
+    hints:['<code>$</code> は行の最後の文字へ移動します。','1行目で <code>$</code> → <code>x</code>、<code>j</code> で下へ、また <code>$</code> → <code>x</code>。','行頭へ戻るのは <code>0</code> です。'] },
+
+  /* ---------- 削除 ---------- */
+  { id:'dd1', stage:'削除', title:'不要な行を1行削除', file:'app.conf', lines:APP_TODO,
+    goal:'<b>行の削除</b>の練習です。6行目の <code># TODO: delete this line</code> にカーソルを合わせ、<code>dd</code> でその1行を削除して保存してください。',
+    target:APP,
+    hints:['<code>6G</code> か <code>j</code> で6行目へ。','<code>d</code> を2回続けて押すと、カーソルのある行が消えます。','消しすぎたら <code>u</code> で戻せます。'] },
+  { id:'dd', stage:'削除', title:'不要な行をまとめて削除', file:'app.conf', lines:APP,
     goal:'<b>行番号で移動して、まとめて削除する</b>練習です。<code>8G</code> で8行目へ飛び、<code>3dd</code> で <code>legacy_</code> で始まる3行を一度に削除して保存してください。',
     target:APP.slice(0,7),
-    hints:['<code>:set nu</code> で行番号を出すと分かりやすくなります。','<code>8G</code> で8行目へ移動。','<code>3dd</code> で3行削除。間違えたら <code>u</code>。'],
-    check:S => eq(S.saved, APP.slice(0,7)) },
-  { id:'cw', title:'設定値を書き換える', file:'app.conf', lines:APP,
-    goal:'<b>検索で目的の場所へ飛ぶ</b>練習です。<code>/8080</code> で検索して <code>8080</code> にカーソルを移動し、<code>cw</code> で <code>80</code> に書き換えて保存してください。',
-    target:APP.map(l=>l==='port = 8080'?'port = 80':l), hl:[2],
-    hints:['<code>/8080</code> と打って Enter で、8080 へ一気に飛べます。','<code>cw</code> で単語を消して挿入モードに入ります。','<code>80</code> と打って <code>Esc</code>、<code>:w</code>。'],
-    check:S => eq(S.saved, APP.map(l=>l==='port = 8080'?'port = 80':l)) },
-  { id:'o', title:'設定を1行追加する', file:'app.conf', lines:APP,
+    hints:['<code>:set nu</code> で行番号を出すと分かりやすくなります。','<code>8G</code> で8行目へ移動。','<code>3dd</code> で3行削除。間違えたら <code>u</code>。'] },
+  { id:'dw', stage:'削除', title:'単語を削除する', file:'app.conf', lines:['log_level = very debug','timeout = 30'],
+    goal:'<b>単語単位の削除</b>の練習です。1行目の <code>very</code> にカーソルを合わせ、<code>dw</code> で単語ごと削除して保存してください。',
+    target:['log_level = debug','timeout = 30'], hl:[0],
+    hints:['<code>w</code> を2回押すと <code>very</code> の先頭に移動します。','<code>dw</code> は「d（削除）＋w（次の単語まで）」。後ろの空白も一緒に消えます。'] },
+  { id:'D', stage:'削除', title:'行末まで削除する', file:'users.conf', lines:['user = admin#old setting','group = wheel'],
+    goal:'<b>カーソルから行末までの削除</b>の練習です。<code>/#</code> で <code>#</code> の位置へ飛び、<code>D</code> でそこから行末までを削除して保存してください。',
+    target:['user = admin','group = wheel'], hl:[0],
+    hints:['<code>/#</code> と打って <code>Enter</code> で # に移動します。','<code>D</code>（大文字）は <code>d$</code> と同じ意味です。'] },
+
+  /* ---------- 入力 ---------- */
+  { id:'A', stage:'入力', title:'行末に追記する', file:'hosts.allow', lines:['allow = 192.168.1.10','deny = all'],
+    goal:'<b>行末からの入力</b>の練習です。1行目で <code>A</code> を押して行末から入力を始め、<code>,192.168.1.11</code> を追記して保存してください。',
+    target:['allow = 192.168.1.10,192.168.1.11','deny = all'], hl:[0],
+    hints:['<code>A</code>（大文字）は、カーソルがどこにあっても行末から入力を始めます。','入力したら <code>Esc</code> → <code>:w</code>。'] },
+  { id:'I', stage:'入力', title:'行頭に # を付けてコメントアウト', file:'app.conf', lines:APP,
+    goal:'<b>行頭からの入力</b>の練習です。8行目の <code>legacy_mode = on</code> で <code>I</code> を押し、行頭に <code>#</code> を入れてコメントアウトして保存してください。',
+    target:APP.map((l,i)=> i===7 ? '#'+l : l), hl:[7],
+    hints:['<code>8G</code> で8行目へ。','<code>I</code>（大文字）は行頭から入力を始めます。','<code>#</code> を打ったら <code>Esc</code> → <code>:w</code>。'] },
+  { id:'o', stage:'入力', title:'下に1行追加する', file:'app.conf', lines:APP,
     goal:'<b>行を追加する</b>練習です。<code>timeout = 30</code> の行で <code>o</code> を押し、その下に <code>keepalive = on</code> という行を追加して保存してください。',
     target:[...APP.slice(0,6),'keepalive = on',...APP.slice(6)], hl:[6],
-    hints:['<code>6G</code> で timeout の行へ。','<code>o</code> で下に新しい行を作って挿入モードになります。','入力したら <code>Esc</code>、<code>:w</code>。'],
-    check:S => eq(S.saved, [...APP.slice(0,6),'keepalive = on',...APP.slice(6)]) },
-  { id:'yy', title:'行を複製して少し変える', file:'hosts.allow', lines:['# allowed clients','allow = 192.168.1.10','deny = all'],
+    hints:['<code>6G</code> で timeout の行へ。','<code>o</code> で下に新しい行を作って挿入モードになります。','入力したら <code>Esc</code>、<code>:w</code>。'] },
+  { id:'O', stage:'入力', title:'上に1行追加する', file:'hosts', lines:['127.0.0.1 localhost','192.168.1.20 web01','192.168.1.21 web02'],
+    goal:'<b>上に行を追加する</b>練習です。2行目の <code>web01</code> の行で <code>O</code>（大文字）を押し、その<b>上</b>に <code># web servers</code> という行を追加して保存してください。',
+    target:['127.0.0.1 localhost','# web servers','192.168.1.20 web01','192.168.1.21 web02'], hl:[1],
+    hints:['<code>j</code> で2行目へ。','<code>o</code> は下、<code>O</code> は上に行を作ります。'] },
+
+  /* ---------- 書き換え ---------- */
+  { id:'cw', stage:'書き換え', title:'検索して設定値を書き換える', file:'app.conf', lines:APP,
+    goal:'<b>検索で目的の場所へ飛ぶ</b>練習です。<code>/8080</code> で検索して <code>8080</code> にカーソルを移動し、<code>cw</code> で <code>80</code> に書き換えて保存してください。',
+    target:APP.map(l=>l==='port = 8080'?'port = 80':l), hl:[2],
+    hints:['<code>/8080</code> と打って Enter で、8080 へ一気に飛べます。','<code>cw</code> で単語を消して挿入モードに入ります。','<code>80</code> と打って <code>Esc</code>、<code>:w</code>。'] },
+  { id:'r', stage:'書き換え', title:'1文字だけ置き換える', file:'app.conf', lines:['max_clients = 100','timeout = 50'],
+    goal:'<b>1文字の置き換え</b>の練習です。2行目の <code>50</code> の <code>5</code> にカーソルを合わせ、<code>r3</code> で <code>30</code> に直して保存してください。',
+    target:['max_clients = 100','timeout = 30'], hl:[1],
+    hints:['<code>j</code> で2行目、<code>$</code> で行末の 0 へ、<code>h</code> で 5 へ。','<code>r</code> の次に押した1文字で置き換わります。挿入モードには入りません。'] },
+  { id:'dot', stage:'書き換え', title:'同じ操作を繰り返す', file:'app.conf', lines:APP,
+    goal:'<b>繰り返し（.）</b>の練習です。8〜10行目の3行すべての行頭に <code>#</code> を付けてください。1行目は <code>I#</code> → <code>Esc</code>、残りは <code>j</code> と <code>.</code> だけでできます。最後に保存してください。',
+    target:APP.map((l,i)=> i>=7 ? '#'+l : l), hl:[7,8,9],
+    hints:['<code>8G</code> → <code>I</code> → <code>#</code> → <code>Esc</code>。','<code>j</code> で下の行へ移動して <code>.</code>。これをもう一度。','<code>.</code> は直前の変更（ここでは「行頭に # を挿入」）を繰り返します。'] },
+
+  /* ---------- コピー・移動 ---------- */
+  { id:'mvline', stage:'コピー', title:'行を移動する（切り取り＆貼り付け）', file:'app.ini', lines:['[server]','port = 80','[client]','timeout = 30','host = example.com'],
+    goal:'<b>切り取りと貼り付け</b>の練習です。最終行の <code>host = example.com</code> を <code>dd</code> で切り取り、<code>[server]</code> の行の下に <code>p</code> で貼り付けて保存してください。',
+    target:['[server]','host = example.com','port = 80','[client]','timeout = 30'], hl:[1],
+    hints:['<code>G</code> で最終行へ → <code>dd</code>。消した行は覚えられています。','<code>gg</code> で1行目へ → <code>p</code> で下に貼り付け。'] },
+  { id:'yy', stage:'コピー', title:'行を複製して少し変える', file:'hosts.allow', lines:['# allowed clients','allow = 192.168.1.10','deny = all'],
     goal:'<b>コピーと貼り付け</b>の練習です。2行目を <code>yy</code> でコピーして <code>p</code> で下に貼り付け、貼り付けた行の末尾を <code>10</code> から <code>11</code> に変えて保存してください。',
     target:['# allowed clients','allow = 192.168.1.10','allow = 192.168.1.11','deny = all'], hl:[2],
-    hints:['2行目で <code>yy</code> → <code>p</code> で下に複製。','<code>$</code> で行末（最後の 0）へ。','<code>r1</code> でカーソル位置の1文字を 1 に置き換え。'],
-    check:S => eq(S.saved, ['# allowed clients','allow = 192.168.1.10','allow = 192.168.1.11','deny = all']) },
-  { id:'sub', title:'まとめて置換する', file:'links.txt', lines:['top: http://example.com/','docs: http://example.com/docs','api: http://api.example.com/ (old: http://old.example.com/)','contact: mailto:info@example.com'],
-    goal:'<b>置換コマンド</b>の練習です。<code>:%s</code> を使って、ファイル中の <code>http://</code> をまとめて <code>https://</code> に置換し、保存してください。3行目には2か所あります。',
+    hints:['2行目で <code>yy</code> → <code>p</code> で下に複製。','<code>$</code> で行末（最後の 0）へ。','<code>r1</code> でカーソル位置の1文字を 1 に置き換え。'] },
+
+  /* ---------- 検索・置換 ---------- */
+  { id:'searchn', stage:'検索・置換', title:'次の検索結果へ進む', file:'app.log', lines:LOG,
+    goal:'<b>検索の「次へ」</b>の練習です。<code>/ERROR</code> で検索し、<code>n</code> で<b>2つ目</b>の ERROR 行（<code>ERROR timeout</code>）へ進んで、<code>dd</code> で削除して保存してください。',
+    target:LOG.filter(l=>l!=='ERROR timeout'),
+    hints:['<code>/ERROR</code> + <code>Enter</code> で1つ目へ。','<code>n</code> で次の候補へ。<code>N</code> なら逆向き。','2つ目に来たら <code>dd</code> → <code>:w</code>。'] },
+  { id:'sub1', stage:'検索・置換', title:'1行だけ置換する', file:'users.conf', lines:['user = guest','group = guest'],
+    goal:'<b>1行だけの置換</b>の練習です。1行目にカーソルがある状態で <code>:s/guest/admin/</code> を実行し、1行目だけを <code>admin</code> に変えて保存してください（2行目は guest のまま）。',
+    target:['user = admin','group = guest'], hl:[0],
+    hints:['<code>%</code> を付けない <code>:s</code> は、カーソルのある行だけが対象です。','<code>:%s</code> にすると2行目まで変わってしまいます。'] },
+  { id:'sub', stage:'検索・置換', title:'まとめて置換する', file:'links.txt', lines:['top: http://example.com/','docs: http://example.com/docs','api: http://api.example.com/ (old: http://old.example.com/)','contact: mailto:info@example.com'],
+    goal:'<b>ファイル全体の置換</b>の練習です。<code>:%s</code> を使って、ファイル中の <code>http://</code> をまとめて <code>https://</code> に置換し、保存してください。3行目には2か所あります。',
     target:['top: https://example.com/','docs: https://example.com/docs','api: https://api.example.com/ (old: https://old.example.com/)','contact: mailto:info@example.com'], hl:[0,1,2],
-    hints:['置換は <code>:%s/前/後/g</code>。','区切りの <code>/</code> と URL の <code>/</code> がぶつかるので、<code>http:</code> → <code>https:</code> と置換するのが簡単です。','末尾の <code>g</code> を忘れると、各行の最初の1つしか変わりません。'],
-    check:S => eq(S.saved, ['top: https://example.com/','docs: https://example.com/docs','api: https://api.example.com/ (old: https://old.example.com/)','contact: mailto:info@example.com']) },
-  { id:'undo', title:'消えた行を取り戻す', file:'app.conf', lines:APP,
+    hints:['置換は <code>:%s/前/後/g</code>。','区切りの <code>/</code> と URL の <code>/</code> がぶつかるので、<code>http:</code> → <code>https:</code> と置換するのが簡単です。','末尾の <code>g</code> を忘れると、各行の最初の1つしか変わりません。'] },
+
+  /* ---------- 取り消し ---------- */
+  { id:'undo', stage:'取り消し', title:'消えた行を取り戻す', file:'app.conf', lines:APP,
     setup:[':','s','e','t',' ','n','u','Enter','3','G','2','d','d'], startInVi:true,
-    goal:'うっかり3〜4行目を消してしまいました。<code>u</code> で元に戻してから、保存して終了してください（<code>:q!</code> は不可）。',
+    goal:'うっかり3〜4行目を消してしまいました。<b>取り消し（u）</b>で元に戻してから、<code>:wq</code> で保存して終了してください（<code>:q!</code> は不可）。',
     target:APP, hl:[2,3],
     hints:['ノーマルモードで <code>u</code> を押すと直前の変更を取り消します。','戻りすぎたら <code>Ctrl+R</code> でやり直し。','最後は <code>:wq</code>。'],
     check:S => S.exited && S.exitBy==='write' && eq(S.saved, APP) },
-  { id:'final', title:'総合問題：設定変更', file:'app.conf', lines:APP,
+  { id:'reload', stage:'取り消し', title:'編集をまるごと捨ててやり直す', file:'app.conf', lines:APP,
+    setup:['d','d','d','d','x','x','x','G','d','d','g','g','J','J'], startInVi:true,
+    goal:'編集がめちゃくちゃになってしまいました。<code>u</code> を何回も押す代わりに、<b><code>:e!</code></b> で最後に保存した状態へ一気に戻し、そのあと <code>:q</code> で終了してください。',
+    target:APP,
+    hints:['<code>:e!</code> は「保存されているファイルを読み直す」コマンド。viは開いたままです。','戻した後は変更がないので、<code>:q</code> で閉じられます。'],
+    check:S => S.exited && S.exitBy==='quit' && eq(S.saved, APP),
+    miss:S => S.exited && S.exitBy==='discard' ? '<code>:q!</code> でも変更は捨てられますが、このミッションでは <code>:e!</code> で戻してから <code>:q</code> で閉じてください。' : '' },
+
+  /* ---------- 総合 ---------- */
+  { id:'final', stage:'総合', title:'総合問題：設定変更', file:'app.conf', lines:APP,
     goal:'これまでの<b>総まとめ</b>です。検索・書き換え・置換・行の追加と削除を組み合わせて、次の4つをすべて行い、保存して終了してください。<br>① port を 80 に ② log_level を info に ③ timeout の下に <code>keepalive = on</code> を追加 ④ legacy_ の3行を削除',
-    target:['# sample config','server_name = test01','port = 80','log_level = info','max_clients = 100','timeout = 30','keepalive = on','# legacy settings'], hl:[2,3,6],
-    hints:['順番は自由。行番号が変わる操作（追加・削除）は後回しにすると楽です。','<code>:%s/debug/info/</code> や <code>cw</code> を活用。','間違えたら <code>u</code>、全部やり直すなら <code>:e!</code>。'],
-    check:S => S.exited && eq(S.saved, ['# sample config','server_name = test01','port = 80','log_level = info','max_clients = 100','timeout = 30','keepalive = on','# legacy settings']) },
-  { id:'free', title:'自由練習', file:'app.conf', lines:APP, free:true,
+    target:['# sample config','server_name = test01','port = 80','log_level = info','max_clients = 100','timeout = 30','keepalive = on','# legacy settings'], hl:[2,3,6], needExit:true,
+    hints:['順番は自由。行番号が変わる操作（追加・削除）は後回しにすると楽です。','<code>:%s/debug/info/</code> や <code>cw</code> を活用。','間違えたら <code>u</code>、全部やり直すなら <code>:e!</code>。'] },
+  { id:'free', stage:'自由', title:'自由練習', file:'app.conf', lines:APP, free:true,
     goal:'課題はありません。早見表のコマンドを自由に試してください。<code>:q!</code> で終了しても、<code>vi app.conf</code> でもう一度開けます。<code>ls</code> や <code>cat</code> も使えます。',
     hints:['<code>dw</code> や <code>d$</code> のように「動詞＋移動」を組み合わせてみましょう。','<code>.</code> で直前の変更を繰り返せます。'],
     check:() => false },
 ];
+for (const m of MISSIONS){ if (!m.check && m.target){ const t=m.target; m.check = m.needExit ? (S => S.exited && eq(S.saved, t)) : (S => eq(S.saved, t)); } }
 
 /* ================= progress ================= */
 let done = {};
@@ -812,7 +892,7 @@ function targetHtml(m){
 }
 function renderMission(){
   const m = MISSIONS[mi];
-  const n = m.free ? '自由' : `MISSION ${String(mi+1).padStart(2,'0')}`;
+  const n = m.free ? '自由' : `MISSION ${String(MISSIONS.slice(0,mi+1).filter(x=>!x.free).length).padStart(2,'0')} ・ ${m.stage}`;
   const cleared = done[m.id];
   $('mission').innerHTML = `
     ${cleared && !m.free ? '<div class="clear-banner">✓ クリア済み</div>' : ''}
@@ -835,7 +915,8 @@ function renderList(){
   const total = MISSIONS.filter(m=>!m.free).length;
   const c = MISSIONS.filter(m=>!m.free && done[m.id]).length;
   $('progress').innerHTML = `クリア <b>${c}</b> / ${total}`; $('meter').style.width = (c/total*100)+'%';
-  $('mlist').innerHTML = MISSIONS.map((m,i)=>`<li><button type="button" data-i="${i}" ${i===mi?'aria-current="true"':''}><span class="no">${m.free?'--':String(i+1).padStart(2,'0')}</span><span>${m.title}</span><span class="st ${done[m.id]?'done':''}">${m.free?'':done[m.id]?'✓':''}</span></button></li>`).join('');
+  let prevStage=''; let no=0;
+  $('mlist').innerHTML = MISSIONS.map((m,i)=>{ let h=''; if (m.stage!==prevStage){ prevStage=m.stage; h=`<li class="stage">${m.stage}</li>`; } if(!m.free) no++; return h+`<li><button type="button" data-i="${i}" ${i===mi?'aria-current="true"':''}><span class="no">${m.free?'--':String(no).padStart(2,'0')}</span><span>${m.title}</span><span class="st ${done[m.id]?'done':''}">${m.free?'':done[m.id]?'✓':''}</span></button></li>`; }).join('');
   $('mlist').querySelectorAll('button').forEach(b=> b.onclick = () => { load(Number(b.dataset.i)); focusKb(); });
 }
 function check(){
